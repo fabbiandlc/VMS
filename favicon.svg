@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="VMS favicon">
+  <defs>
+    <linearGradient id="vmsGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#19c2ff"/>
+      <stop offset="27%" stop-color="#3d6ef6"/>
+      <stop offset="53%" stop-color="#9a3ff3"/>
+      <stop offset="78%" stop-color="#f2368f"/>
+      <stop offset="100%" stop-color="#ff8d00"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" fill="#000000"/>
+  <text x="256" y="290"
+        text-anchor="middle"
+        dominant-baseline="middle"
+        font-family="Arial Black, Impact, sans-serif"
+        font-size="320"
+        font-weight="900"
+        letter-spacing="-18"
+        fill="url(#vmsGrad)">VMS</text>
+</svg>

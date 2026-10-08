@@ -2189,7 +2189,7 @@ insert into public.race_results (race_id, series_id, driver_id, driver_name, tea
       '', '', 'classified'
     );
 insert into public.race_results (race_id, series_id, driver_id, driver_name, team_name, pos, pts, fl, pole, gap, note, status) values (
-      'r_02', 'f3', 'd_f3_fabian', 'Fabián', 'Tarigy''s Motorsport Team F3',
+      'r_02', 'f3', 'd_f3_fabian', 'Fabián', 'Renault Sport Formula 1 Team F3',
       8, 6, false, false,
       '', '', 'classified'
     );
@@ -2209,7 +2209,7 @@ insert into public.race_results (race_id, series_id, driver_id, driver_name, tea
       '', '', 'classified'
     );
 insert into public.race_results (race_id, series_id, driver_id, driver_name, team_name, pos, pts, fl, pole, gap, note, status) values (
-      'r_03', 'f3', 'd_f3_fabian', 'Fabián', 'Tarigy''s Motorsport Team F3',
+      'r_03', 'f3', 'd_f3_fabian', 'Fabián', 'Renault Sport Formula 1 Team F3',
       3, 16, false, false,
       '', '', 'classified'
     );

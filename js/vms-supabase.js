@@ -25,9 +25,15 @@
     return Array.isArray(value) ? value : [value];
   }
 
+  function normalizeRaceStatus(value) {
+    const status = safeText(value, 'upcoming').toLowerCase();
+    if (['completed', 'upcoming', 'live', 'break'].includes(status)) return status;
+    return 'upcoming';
+  }
+
   function mergeSeriesMeta(seriesRows) {
     if (!seriesRows || !seriesRows.length) return;
-    const meta = window.SERIES_META || {};
+    const meta = { ...(window.SERIES_META || SERIES_META || {}) };
     seriesRows.forEach((row) => {
       const slug = safeText(row.slug || row.id, '').toLowerCase();
       if (!slug) return;
@@ -45,11 +51,108 @@
         desc: safeText(row.meta?.desc || meta[slug]?.desc || '', ''),
       };
     });
-    window.SERIES_META = meta;
+    SERIES_META = meta;
+    window.SERIES_META = SERIES_META;
     if (Array.isArray(window.SERIES_LIST)) {
       window.SERIES_LIST.length = 0;
       Object.keys(meta).forEach((key) => window.SERIES_LIST.push(key));
     }
+  }
+
+  function buildRaceCalendar(raceRows, raceSeriesRows) {
+    const map = new Map();
+    (raceSeriesRows || []).forEach((row) => {
+      const raceId = safeText(row.race_id || row.raceId || row.id, '');
+      const seriesId = safeText(row.series_id || row.seriesId || row.series || '', '').toLowerCase();
+      if (!raceId || !seriesId) return;
+      if (!map.has(raceId)) map.set(raceId, new Set());
+      map.get(raceId).add(seriesId);
+    });
+
+    const races = (raceRows || []).map((row) => {
+      const raceId = safeText(row.id || row.race_id || row.raceId, '');
+      const series = Array.from(map.get(raceId) || new Set()).filter(Boolean);
+      const defaultSeries = series.length ? series : ['f1', 'f2', 'f3'];
+      const parsedSortOrder = Number.parseInt(safeText(row.sort_order || row.sortOrder || '', '0'), 10);
+      const fallbackRound = Number.parseInt(safeText(row.rnd || row.round || '0', '0'), 10);
+      return {
+        rnd: safeText(row.rnd || row.round || '0', '0'),
+        name: safeText(row.name || row.title || 'Race', 'Race'),
+        circuit: safeText(row.circuit || row.track || '', ''),
+        satDate: safeText(row.sat_date || row.satDate || '', ''),
+        sunDate: safeText(row.sun_date || row.sunDate || '', ''),
+        status: normalizeRaceStatus(row.status),
+        series: defaultSeries,
+        flag: safeText(row.flag || '', ''),
+        flagCode: safeText(row.flag_code || row.flagCode || '', ''),
+        sort_order: Number.isFinite(parsedSortOrder) && parsedSortOrder >= 0 ? parsedSortOrder : (Number.isFinite(fallbackRound) ? fallbackRound : 0),
+      };
+    });
+
+    races.sort((a, b) => {
+      const left = Number.isFinite(Number(a.sort_order)) ? Number(a.sort_order) : (Number(a.rnd) || 0);
+      const right = Number.isFinite(Number(b.sort_order)) ? Number(b.sort_order) : (Number(b.rnd) || 0);
+      if (left !== right) return left - right;
+      return a.name.localeCompare(b.name);
+    });
+
+    if (!RACES || !Array.isArray(RACES)) {
+      return races;
+    }
+
+    RACES.length = 0;
+    races.forEach((race) => RACES.push(race));
+    window.RACES = RACES;
+    return races;
+  }
+
+  function buildResultsMap(resultsRows, allRaces) {
+    const raceMap = new Map((allRaces || []).map((race) => [safeText(race.id || race.race_id || '', ''), race]));
+    const results = {};
+
+    (resultsRows || []).forEach((row) => {
+      const raceId = safeText(row.race_id || row.raceId || '', '');
+      const seriesId = safeText(row.series_id || row.seriesId || row.series || 'f1', 'f1').toLowerCase();
+      const race = raceMap.get(raceId) || { rnd: safeText(row.rnd || row.round || '0', '0') };
+      const roundKey = safeText(race.rnd || row.rnd || row.round || '0', '0');
+      const raceKey = raceId ? raceId.replace(/^r_/, '') : roundKey;
+      const entry = {
+        pos: Number(row.pos) || 0,
+        name: buildDriverLabel(row.driver_name || row.driverName || row.name, 'Unknown Driver'),
+        team: safeText(row.team_name || row.teamName || '', ''),
+        pts: Number(row.pts) || 0,
+        fl: Boolean(row.fl),
+        pole: Boolean(row.pole),
+        gap: safeText(row.gap || '', ''),
+        note: safeText(row.note || '', ''),
+        status: safeText(row.status || '', 'classified'),
+      };
+
+      const candidateKeys = new Set([
+        `${roundKey}-${seriesId}`,
+        `${raceKey}-${seriesId}`,
+        `${raceId}-${seriesId}`,
+        `${raceId.replace(/^r_/, '')}-${seriesId}`,
+      ]);
+
+      candidateKeys.forEach((key) => {
+        if (!results[key]) results[key] = [];
+        results[key].push(entry);
+      });
+    });
+
+    Object.keys(results).forEach((key) => {
+      results[key].sort((a, b) => (a.pos || 99) - (b.pos || 99));
+    });
+
+    if (!RESULTS || typeof RESULTS !== 'object') {
+      return results;
+    }
+
+    Object.keys(RESULTS).forEach((key) => delete RESULTS[key]);
+    Object.assign(RESULTS, results);
+    window.RESULTS = RESULTS;
+    return results;
   }
 
   function buildInfoData(seriesRows, teamsRows, driversRows) {
@@ -327,16 +430,20 @@
     }
 
     try {
-      const [seriesRows, teamsRows, driversRows, driverStandingsRows, constructorStandingsRows, resultsRows] = await Promise.all([
+      const [seriesRows, teamsRows, driversRows, driverStandingsRows, constructorStandingsRows, raceRows, raceSeriesRows, resultsRows] = await Promise.all([
         fetchTable('series', '*').catch(() => []),
         fetchTable('teams', '*').catch(() => []),
         fetchTable('drivers', '*').catch(() => []),
         fetchTable('driver_standings', '*').catch(() => []),
         fetchTable('constructor_standings', '*').catch(() => []),
+        fetchTable('races', '*').catch(() => []),
+        fetchTable('race_series', '*').catch(() => []),
         fetchTable('race_results', '*').catch(() => []),
       ]);
 
       mergeSeriesMeta(seriesRows);
+      const nextRaces = buildRaceCalendar(raceRows, raceSeriesRows);
+      const nextResults = buildResultsMap(resultsRows, nextRaces);
       const nextInfo = buildInfoData(seriesRows, teamsRows, driversRows);
       const nextStandings = buildStandingsData(seriesRows, teamsRows, driversRows, driverStandingsRows, constructorStandingsRows, resultsRows);
 
@@ -348,8 +455,10 @@
         });
       }
 
-      window.STANDINGS_DATA = { ...(window.STANDINGS_DATA || {}), ...nextStandings };
-      window.INFO_DATA = { ...(window.INFO_DATA || {}), ...nextInfo };
+      STANDINGS_DATA = { ...(STANDINGS_DATA || {}), ...nextStandings };
+      INFO_DATA = { ...(INFO_DATA || {}), ...nextInfo };
+      window.STANDINGS_DATA = STANDINGS_DATA;
+      window.INFO_DATA = INFO_DATA;
 
       if (typeof window.renderHomeStandings === 'function') {
         window.renderHomeStandings();
@@ -359,6 +468,9 @@
       }
       if (typeof window.renderTitleFight === 'function') {
         window.renderTitleFight();
+      }
+      if (typeof window.renderPodiumWall === 'function') {
+        window.renderPodiumWall();
       }
       if (typeof window.renderUpNext === 'function') {
         window.renderUpNext();

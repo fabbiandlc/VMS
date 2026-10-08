@@ -3,7 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>VMS — Velocity Motorsport Series</title>
+<title>VMS</title>
+<link rel="icon" type="image/svg+xml" href="./favicon.svg">
+<link rel="shortcut icon" href="./favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="./favicon.svg">
 <script src="./js/vms-config.js"></script>
 <script src="./js/vms-supabase.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Anton&family=Caveat:wght@500;600&family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
@@ -2864,7 +2867,7 @@ const SOCIAL_LINKS = {
   youtube: 'https://www.youtube.com/@VMS_1',
 };
 
-const RACES = [
+const RACES = []; /* legacy races data disabled
   {rnd:'01', name:'Italian Grand Prix',        circuit:'Autodromo Nazionale Monza',                    satDate:'Jun 27', sunDate:'Jun 28', status:'completed', series:['f1','f2','f3'], flag:'🇮🇹', flagCode:'it'},
   {rnd:'02', name:'Canadian Grand Prix',       circuit:'Circuit Gilles Villeneuve',                    satDate:'Jul 4',  sunDate:'Jul 5',  status:'completed', series:['f1','f2','f3'], flag:'🇨🇦', flagCode:'ca'},
   {rnd:'03', name:'Las Vegas Grand Prix',      circuit:'Las Vegas Strip Circuit',                      satDate:'Jul 11', sunDate:'Jul 12', status:'completed', series:['f1','f2','f3'], flag:'🇺🇸', flagCode:'us'},
@@ -2885,6 +2888,8 @@ const RACES = [
   {rnd:'17', name:'British Grand Prix',        circuit:'Silverstone Circuit',                          satDate:'Oct 24', sunDate:'Oct 25', status:'upcoming', series:['f1','f2','f3'], flag:'🇬🇧', flagCode:'gb'},
   {rnd:'18', name:'Abu Dhabi Grand Prix',      circuit:'Yas Marina Circuit',                           satDate:'Oct 31', sunDate:'Nov 1', status:'upcoming', series:['f1','f2','f3'], flag:'🇦🇪', flagCode:'ae'},
 ];
+
+*/
 
 // Returns the round label for a given series, honoring per-series overrides
 // (used when a round is cancelled for some series but not others, e.g. F2/F3 skipping a round F1 still runs).
@@ -2919,16 +2924,40 @@ function getRaceEnd(race){
   return _parseDayUTC(lastDayStr, 27, 59, 59); // 23:59:59 EDT, rolled into UTC via hour>23
 }
 
-// The next race to show anywhere on the site — purely date-driven, no manual status flips needed.
+function getRaceSortValue(race){
+  if(!race) return Number.MAX_SAFE_INTEGER;
+  if(Number.isFinite(Number(race.sort_order))) return Number(race.sort_order);
+  const raw = String(race.rnd || race.round || race.id || '999');
+  const match = raw.match(/\d+/);
+  const roundNum = match ? Number(match[0]) : Number.MAX_SAFE_INTEGER;
+  return Number.isFinite(roundNum) ? roundNum : Number.MAX_SAFE_INTEGER;
+}
+
+// The landing page should follow the championship order from the source data, not a stale
+// status heuristic. Supabase `sort_order` wins first, then round number as fallback.
 function getNextRace(series){
+  const matchSeries = (race) => !series || (race.series||[]).includes(series);
   const now = Date.now();
-  return RACES.find(r=>{
+
+  const future = RACES.filter(r => {
     if(r.status==='break') return false;
-    if(series && !(r.series||[]).includes(series)) return false;
+    if(!matchSeries(r)) return false;
+    if(r.status === 'completed') return false;
+
     const end = getRaceEnd(r);
-    if(!end) return r.status==='upcoming'||r.status==='live'; // fallback for malformed rows
-    return end.getTime() > now;
-  }) || null;
+    if(!end) return (r.status === 'upcoming' || r.status === 'live');
+    if(end.getTime() <= now) return false;
+    return r.status === 'upcoming' || r.status === 'live';
+  }).sort((a,b) => getRaceSortValue(a) - getRaceSortValue(b));
+
+  if(future.length) return future[0];
+
+  return RACES.filter(r => {
+    if(r.status==='break') return false;
+    if(!matchSeries(r)) return false;
+    if(r.status === 'completed') return false;
+    return r.status === 'upcoming' || r.status === 'live';
+  }).sort((a,b) => getRaceSortValue(a) - getRaceSortValue(b))[0] || null;
 }
 
 function isRaceLive(race){
@@ -2939,12 +2968,8 @@ function isRaceLive(race){
 }
 
 // Session times & race day per series
-const SESSION_TIMES = {
-  f1:  {day:'Saturday', time:'11:00 AM EST'},
-  f2:  {day:'Saturday', time:'1:00 PM EST'},
-  f3:  {day:'Sunday',   time:'11:00 AM EST'},
-};
-const RESULTS = {
+const SESSION_TIMES = { f1: { day: 'Saturday', time: 'TBD' }, f2: { day: 'Saturday', time: 'TBD' }, f3: { day: 'Sunday', time: 'TBD' } };
+const RESULTS = {}; /* legacy results data disabled
   '01-f1': [
     {pos:1,  name:'Michael',    team:'Mercedes-AMG',                   pts:26, fl:false, pole:false, note:'Retired from championship — pts count for WCC only'},
     {pos:1,  name:'Nick',       team:'Scuderia Ferrari',               pts:26, fl:false, pole:true,  note:'50% rule Art. B.4.2'},
@@ -3325,402 +3350,35 @@ const RESULTS = {
 };
 
 
-const STANDINGS_DATA = {
-  f1: {
-    drivers: [
-      {name:'Nick', code:'MD1', team:'Scuderia Ferrari', pts:282, wins:0,pods:0,dnf:0,pos:1, gap:'0', form:['W','W','W']},
-      {name:'Lory', code:'MD2', team:'Richard Mille LM Motorsport F1', pts:139, wins:0,pods:0,dnf:0,pos:2, gap:'-143', form:['2','4','6']},
-      {name:'Sly', code:'MD1', team:'Sahara Force India F1 Team', pts:45, wins:0,pods:0,dnf:0,pos:3, gap:'-237', form:['3','DNF','3']},
-      {name:'Ageftyg2', code:'MD2', team:'Scuderia Ferrari', pts:41, wins:0,pods:0,dnf:0,pos:4, gap:'-241', form:['DNP','9','DNF']},
-      {name:'Joshua', code:'', team:'Renault Sport Formula 1 Team', pts:40, wins:0,pods:0,dnf:0,pos:5, gap:'-242', form:[]},
-      {name:'Arin', code:'MD1', team:'Aero Apex Racing', pts:34, wins:0,pods:0,dnf:0,pos:6, gap:'-248', form:['5','6','5']},
-      {name:'Theo', code:'MD2', team:'Vodafone McLaren', pts:28, wins:0,pods:0,dnf:0,pos:7, gap:'-254', form:['DNP','10','DNP']},
-      {name:'Daih_V', code:'MD1', team:'Vanguard Sabre Motorsport', pts:24, wins:0,pods:0,dnf:0,pos:8, gap:'-258', form:['DNP','DNP','DNP']},
-      {name:'Yokesecapo', code:'RD1', team:'GlitchGP F1 Team', pts:24, wins:0,pods:0,dnf:0,pos:9, gap:'-258', form:['DNP','7','DNF']},
-      {name:'Vitality', code:'MD2', team:'Scuderia Ferrari', pts:23, wins:0,pods:0,dnf:0,pos:10, gap:'-259', form:['DNF','DNP','DNP']},
-      {name:'Sun_rise', code:'MD1', team:'Hertz Porsche', pts:22, wins:0,pods:0,dnf:0,pos:11, gap:'-260', form:['DNP','DNP','DNP']},
-      {name:'Sckibles', code:'MD2', team:'GlitchGP F1 Team', pts:20, wins:0,pods:0,dnf:0,pos:12, gap:'-262', form:['DNP','DNP','DNP']},
-      {name:'GKF', code:'MD1', team:'Vodafone McLaren', pts:20, wins:0,pods:0,dnf:0,pos:13, gap:'-262', form:['6','5']},
-      {name:'Lewis', code:'MD2', team:'Vanguard Sabre Motorsport', pts:16, wins:0,pods:0,dnf:0,pos:14, gap:'-266', form:['DNP','DNP','DNF']},
-      {name:'Rats', code:'MD1', team:'Tarigy\'s Motorsport Team F1', pts:16, wins:0,pods:0,dnf:0,pos:15, gap:'-266', form:['DNP','DNF','8']},
-      {name:'Skirmis', code:'RD2', team:'Richard Mille LM Motorsport F1', pts:15, wins:0,pods:0,dnf:0,pos:16, gap:'-267', form:['DNP','DNP','DNP']},
-      {name:'GreenShinobi', code:'MD2', team:'Renault Sport Formula 1 Team', pts:15, wins:0,pods:0,dnf:0,pos:17, gap:'-267', form:['DNP','3','DNF']},
-      {name:'Unironically', code:'MD1', team:'Mercedes-AMG', pts:12, wins:0,pods:0,dnf:0,pos:18, gap:'-270', form:['DNP','8','4']},
-      {name:'ShadowRex', code:'', team:'', pts:12, wins:0,pods:0,dnf:0,pos:19, gap:'-270', form:[]},
-      {name:'Amin', code:'MD1', team:'Renault Sport Formula 1 Team', pts:12, wins:0,pods:0,dnf:0,pos:20, gap:'-270', form:['4','DNP','DSq']},
-      {name:'John', code:'MD2', team:'Hertz Porsche', pts:10, wins:0,pods:0,dnf:0,pos:21, gap:'-272', form:['DNP','DNP','DNP']},
-      {name:'Infinity', code:'RD1', team:'Aero Apex Racing', pts:8, wins:0,pods:0,dnf:0,pos:22, gap:'-274', form:['DNF','DNP','DNP']},
-      {name:'Bence', code:'MD1', team:'GlitchGP F1 Team', pts:8, wins:0,pods:0,dnf:0,pos:23, gap:'-274', form:['7','12','9']},
-      {name:'Sam', code:'MD2', team:'Sahara Force India F1 Team', pts:5, wins:0,pods:0,dnf:0,pos:24, gap:'-277', form:['DNP','DNP','10']},
-      {name:'Peters', code:'RD2', team:'Richard Mille LM Motorsport F1', pts:4, wins:0,pods:0,dnf:0,pos:25, gap:'-278', form:['8']},
-      {name:'Yuki', code:'RD2', team:'GlitchGP F1 Team', pts:2, wins:0,pods:0,dnf:0,pos:26, gap:'-280', form:['9']},
-      {name:'Emirovic', code:'', team:'', pts:1, wins:0,pods:0,dnf:0,pos:27, gap:'-281', form:[]},
-    ],
-    constructors: [
-      {name:'Scuderia Ferrari', color:'#dc143c', pts:333, pos:1},
-      {name:'Richard Mille LM Motorsport F1', color:'#a78bfa', pts:309, pos:2},
-      {name:'Renault Sport Formula 1 Team', color:'#60a5fa', pts:164, pos:3},
-      {name:'Aero Apex Racing', color:'#7c3aed', pts:117, pos:4},
-      {name:'Mercedes-AMG', color:'#00d2be', pts:113, pos:5},
-      {name:'GlitchGP F1 Team', color:'#8e3bb5', pts:84, pos:6},
-      {name:'Sahara Force India F1 Team', color:'#d7ef00', pts:58, pos:7},
-      {name:'Vodafone McLaren', color:'#ff8000', pts:55, pos:8},
-      {name:'Tarigy\'s Motorsport Team F1', color:'#1438d4', pts:42, pos:9},
-      {name:'Hertz Porsche', color:'#b9a96a', pts:33, pos:10},
-      {name:'Vanguard Sabre Motorsport', color:'#7f1010', pts:32, pos:11}
-    ]
-  },
-  f2: {
-    drivers: [
-      {name:'Skirmis', code:'MD1', team:'LM Performance F2', pts:184,wins:0,pods:0,dnf:0,pos:1,gap:'',form:[]},
-      {name:'Gamrin', code:'MD1', team:'Renault Sport Formula 2 Team', pts:181,wins:0,pods:0,dnf:0,pos:2,gap:'-3',form:[]},
-      {name:'Crocs', code:'MD2', team:'Carti Racing Association', pts:143,wins:0,pods:0,dnf:0,pos:3,gap:'-41',form:[]},
-      {name:'Juan', code:'MD1', team:'Carti Racing Association', pts:123,wins:0,pods:0,dnf:0,pos:4,gap:'-61',form:[]},
-      {name:'Alien', code:'MD1', team:'Nissan Nissmo', pts:95,wins:0,pods:0,dnf:0,pos:5,gap:'-89',form:[]},
-      {name:'Zaphira', code:'MD2', team:'Nissan Nissmo', pts:47,wins:0,pods:0,dnf:0,pos:6,gap:'-137',form:[]},
-      {name:'Jeffz', code:'MD3', team:'LM Performance F2', pts:40,wins:0,pods:0,dnf:0,pos:7,gap:'-144',form:[]},
-      {name:'Peters', code:'MD2', team:'LM Performance F2', pts:38,wins:0,pods:0,dnf:0,pos:8,gap:'-146',form:[]},
-      {name:'Style', code:'MD1', team:'Vanguard Sabre Racing', pts:24,wins:0,pods:0,dnf:0,pos:9,gap:'-160',form:[]},
-      {name:'Fandrs', code:'MD1', team:'PREMA Fast Line Racing', pts:22,wins:0,pods:0,dnf:0,pos:10,gap:'-162',form:[]},
-      {name:'Zach', code:'—', team:'', pts:20,wins:0,pods:0,dnf:0,pos:11,gap:'-164',form:[]},
-      {name:'Igor', code:'RD1', team:'Tarigy\'s Motorsport Team F2', pts:20,wins:0,pods:0,dnf:0,pos:12,gap:'-164',form:[]},
-      {name:'Gui', code:'MD2', team:'Renault Sport Formula 2 Team', pts:18,wins:0,pods:0,dnf:0,pos:13,gap:'-166',form:[]},
-      {name:'Kyo', code:'MD1', team:'Aero Apex Racing F2', pts:16,wins:0,pods:0,dnf:0,pos:14,gap:'-168',form:[]},
-      {name:'Zayn', code:'MD2', team:'AF Corsa', pts:16,wins:0,pods:0,dnf:0,pos:15,gap:'-168',form:[]},
-      {name:'Vittorio', code:'RD2', team:'Nissan Nissmo', pts:12,wins:0,pods:0,dnf:0,pos:16,gap:'-172',form:[]},
-      {name:'Maldonado', code:'MD1', team:"Tarigy's Motorsport Team F2", pts:12,wins:0,pods:0,dnf:0,pos:17,gap:'-172',form:[]},
-      {name:'Wavee', code:'MD1', team:'Racing Point F2', pts:12,wins:0,pods:0,dnf:0,pos:18,gap:'-172',form:[]},
-      {name:'Gasly', code:'RD1', team:'AF Corsa', pts:10,wins:0,pods:0,dnf:0,pos:19,gap:'-174',form:[]},
-      {name:'Danomk', code:'MD2', team:'PREMA Fast Line Racing', pts:10,wins:0,pods:0,dnf:0,pos:20,gap:'-174',form:[]},
-      {name:'Nahim', code:'MD2', team:'Vanguard Sabre Racing', pts:10,wins:0,pods:0,dnf:0,pos:21,gap:'-174',form:[]},
-      {name:'Penguin', code:'RD1', team:'Vanguard Sabre Racing', pts:6,wins:0,pods:0,dnf:0,pos:22,gap:'-178',form:[]},
-      {name:'AO', code:'—', team:'BMW Sauber F2 Team', pts:6,wins:0,pods:0,dnf:0,pos:23,gap:'-178',form:[]},
-      {name:'Alonso', code:'', team:"Tarigy's Motorsport Team F2", pts:4,wins:0,pods:0,dnf:0,pos:24,gap:'-180',form:[]},
-      {name:'Lewis', code:'', team:'Vanguard Sabre Racing', pts:2,wins:0,pods:0,dnf:0,pos:25,gap:'-182',form:[]},
-      {name:'Dante', code:'', team:"Tarigy's Motorsport Team F2", pts:2,wins:0,pods:0,dnf:0,pos:26,gap:'-182',form:[]},
-      {name:'FB', code:'—', team:'Aero Apex Racing F2', pts:1,wins:0,pods:0,dnf:0,pos:27,gap:'-183',form:[]},
-    ],
-    constructors: [
-      {name:'LM Performance F2', color:'#a78bfa', pts:380, pos:1},
-      {name:'Renault Sport Formula 2 Team (Isreal)', color:'#60a5fa', pts:228, pos:2},
-      {name:'Carti Racing Association', color:'#ec4899', pts:214, pos:3},
-      {name:"Tarigy’s Motorsport Team F2 (Acura)", color:'#7b2cbf', pts:108, pos:4},
-      {name:'Nissan Nissmo (Night Reapers X)', color:'#dbe4cf', pts:80, pos:5},
-      {name:'Aero Apex Racing F2', color:'#2496d2', pts:75, pos:6},
-      {name:'AF Corsa', color:'#e11d48', pts:70, pos:7},
-      {name:'Racing Point F2 (Cassien)', color:'#d100ff', pts:44, pos:8},
-      {name:'Vanguard Sabre Racing', color:'#b91c1c', pts:44, pos:9},
-      {name:'Prema Fast Line Racing', color:'#d1d5db', pts:32, pos:10},
-      {name:'BMW Sauber F2 Team (OKX HP Crimson GP)', color:'#7dd3fc', pts:6, pos:11}
-    ],
-  },
-
-  f3: {
-    teams: [
-      {name:'LM Performance F3', engine:'CEO: Mikos | LM CEO · Director: Lawie (Gay Bitch)', color:'#a78bfa', drivers:[
-        {num:'53', code:'MD1', name:'Piko', pts:0, wins:0, pods:0},
-        {num:'—', code:'MD2', name:'—', pts:0, wins:0, pods:0},
-        {num:'99', code:'MD3', name:'Jeffz', pts:0, wins:0, pods:0},
-        {num:'21', code:'RD1', name:'Kriekel', pts:0, wins:0, pods:0},
-      ]},
-      {name:"Tarigy's Motorsport Team F3", engine:"CEO: Flande | Tarigy’s CEO · Director: Lauu's lover | Tarigy's Director", color:'#f59e0b', drivers:[
-        {num:'11', code:'MD1', name:'Fabián', pts:0, wins:0, pods:0},
-        {num:'27', code:'MD2', name:'Lancelot', pts:0, wins:0, pods:0},
-        {num:'—', code:'MD3', name:'El_Manco010', pts:0, wins:0, pods:0},
-        {num:'—', code:'RD1', name:'—', pts:0, wins:0, pods:0},
-      ]},
-      {name:'Aston Martin Racing F3', engine:'CEO: G spot', color:'#22c55e', drivers:[
-        {num:'5', code:'MD1', name:'Sam', pts:0, wins:0, pods:0},
-        {num:'21', code:'MD2', name:'Tta', pts:0, wins:0, pods:0},
-        {num:'88', code:'MD3', name:'Maslo', pts:0, wins:0, pods:0},
-        {num:'78', code:'RD1', name:'Mikey', pts:0, wins:0, pods:0},
-      ]},
-      {name:'Renault Sport Formula 3 Team', engine:'CEO: Neon | McLaren & Isreal CEO | Director: Doxxi (@BUBOJEPES2)', color:'#60a5fa', drivers:[
-        {num:'—', code:'MD1', name:'—', pts:0, wins:0, pods:0},
-        {num:'—', code:'MD2', name:'—', pts:0, wins:0, pods:0},
-        {num:'55', code:'MD3', name:'Rice', pts:0, wins:0, pods:0},
-      ]},
-      {name:'Carti Racing Association F3', engine:'CEO: Tiyu | Argentina | Carti CEO | Director: Zak', color:'#ec4899', drivers:[
-        {num:'3', code:'MD1', name:'ukkiett', pts:0, wins:0, pods:0},
-        {num:'77', code:'MD2', name:'Wibz', pts:0, wins:0, pods:0},
-        {num:'57', code:'MD3', name:'Dannell', pts:0, wins:0, pods:0},
-        {num:'13', code:'RD1', name:'Chipi Menor', pts:0, wins:0, pods:0},
-      ]},
-      {name:'Aero Apex Racing F3', engine:'CEO: Flekzy | Aero CEO', color:'#7c3aed', drivers:[
-        {num:'77', code:'MD1', name:'Nyiko', pts:0, wins:0, pods:0},
-        {num:'—', code:'MD2', name:'Elden', pts:0, wins:0, pods:0},
-        {num:'95', code:'MD3', name:'BETICOSSS', pts:0, wins:0, pods:0},
-        {num:'—', code:'RD1', name:'—', pts:0, wins:0, pods:0},
-      ]},
-      {name:'Pola Sabre Motorsports', engine:'CEO: POnight_LAlloy | Director: Malik (@Malil1401)', color:'#1e40af', drivers:[
-        {num:'28', code:'MD1', name:'Dark Shadow', pts:0, wins:0, pods:0},
-        {num:'10', code:'MD2', name:'Elf', pts:0, wins:0, pods:0},
-        {num:'04', code:'MD3', name:'Bartos', pts:0, wins:0, pods:0},
-        {num:'—', code:'RD1', name:'—', pts:0, wins:0, pods:0},
-      ]},
-      {name:'Anonymous Juniors', engine:'CEO: pringle-i luv jem,jamie,silk,age', color:'#dc143c', drivers:[
-        {num:'56', code:'MD1', name:'Piti', pts:0, wins:0, pods:0},
-        {num:'18', code:'MD2', name:'Halo', pts:0, wins:0, pods:0},
-        {num:'—', code:'MD3', name:'unknown-user', pts:0, wins:0, pods:0},
-        {num:'1', code:'RD1', name:'Majd', pts:0, wins:0, pods:0},
-      ]},
-      {name:'Kogun Technologies F3 Team', engine:'CEO: Altin | Kogun CEO | Director: Whapples', color:'#eab308', drivers:[
-        {num:'45', code:'MD1', name:'ellie', pts:0, wins:0, pods:0},
-        {num:'96', code:'MD2', name:'Avda', pts:0, wins:0, pods:0},
-        {num:'45', code:'MD3', name:'Marin', pts:0, wins:0, pods:0},
-        {num:'—', code:'RD1', name:'Dunstsoocerking4', pts:0, wins:0, pods:0},
-      ]},
-      {name:'BMW Sauber F3 Team', engine:'CEO: Jamie | BMW Sauber CEO', color:'#7dd3fc', drivers:[
-        {num:'5', code:'MD1', name:'Kashin', pts:0, wins:0, pods:0},
-        {num:'55', code:'MD2', name:'Roven', pts:0, wins:0, pods:0},
-        {num:'17', code:'MD3', name:'Genghis', pts:0, wins:0, pods:0},
-        {num:'—', code:'RD1', name:'—', pts:0, wins:0, pods:0},
-      ]},
-      {name:'GlitchGP F3', engine:'CEO: LeYeetBoi | Merc & GlitchGP CEO · Director: CJ | GlitchGP Director', color:'#00d2be', drivers:[
-        {num:'19', code:'MD1', name:'Hakeman', pts:0, wins:0, pods:0},
-        {num:'77', code:'MD2', name:'Bence', pts:0, wins:0, pods:0},
-        {num:'34', code:'MD3', name:'syxe', pts:0, wins:0, pods:0},
-        {num:'15', code:'RD1', name:'Leo', pts:0, wins:0, pods:0},
-      ]},
-    ],
-    drivers: [
-      {name:'Piko', code:'MD1', team:'LMP', pts:228,wins:0,pods:0,dnf:0,pos:1,gap:'',form:[]},
-      {name:'Jeffz', code:'MD3', team:'LMP', pts:138,wins:0,pods:0,dnf:0,pos:2,gap:'-90',form:[]},
-      {name:'Ukkiett', code:'MD1', team:'Carti Racing Association F3', pts:114,wins:0,pods:0,dnf:0,pos:3,gap:'-114',form:[]},
-      {name:'Bartos', code:'MD3', team:'Pola Sabre Motorsports', pts:102,wins:0,pods:0,dnf:0,pos:4,gap:'-126',form:[]},
-      {name:'Dark Shadow', code:'MD1', team:'Pola Sabre Motorsports', pts:78,wins:0,pods:0,dnf:0,pos:5,gap:'-150',form:[]},
-      {name:'Ukizi', code:'RD1', team:'LMP', pts:76,wins:0,pods:0,dnf:0,pos:6,gap:'-152',form:[]},
-      {name:'Fabian', code:'MD1', team:"Tarigy's Motorsport Team F3", pts:67,wins:0,pods:0,dnf:0,pos:7,gap:'-161',form:[]},
-      {name:'Peters', code:'—', team:"Tarigy's Motorsport Team F3", pts:50,wins:0,pods:0,dnf:0,pos:8,gap:'-178',form:[]},
-      {name:'Lancelot', code:'MD2', team:"Tarigy's Motorsport Team F3", pts:46,wins:0,pods:0,dnf:0,pos:9,gap:'-182',form:[]},
-      {name:'Jardin', code:'MD2', team:'LMP', pts:39,wins:0,pods:0,dnf:0,pos:10,gap:'-189',form:[]},
-      {name:'Shadow Rex', code:'—', team:"Tarigy's Motorsport Team F3", pts:28,wins:0,pods:0,dnf:0,pos:11,gap:'-200',form:[]},
-      {name:'Maldonado', code:'—', team:"Tarigy's Motorsport Team F3", pts:21,wins:0,pods:0,dnf:0,pos:12,gap:'-207',form:[]},
-      {name:'Ageftyg2', code:'—', team:'—', pts:20,wins:0,pods:0,dnf:0,pos:13,gap:'-208',form:[]},
-      {name:'YellowRice', code:'—', team:'Renault Sport Formula 3 Team', pts:17,wins:0,pods:0,dnf:0,pos:14,gap:'-211',form:[]},
-      {name:'Syxe', code:'MD3', team:'GlitchGP F3', pts:15,wins:0,pods:0,dnf:0,pos:15,gap:'-213',form:[]},
-      {name:'Ellie', code:'MD1', team:'Kogun Technologies F3 Team', pts:14,wins:0,pods:0,dnf:0,pos:16,gap:'-214',form:[]},
-      {name:'SCKIBLES', code:'—', team:'GlitchGP F3', pts:12,wins:0,pods:0,dnf:0,pos:17,gap:'-216',form:[]},
-      {name:'Bobby', code:'MD3', team:'Fast Line Motorsport F3 Team', pts:10,wins:0,pods:0,dnf:0,pos:18,gap:'-218',form:[]},
-      {name:'Piti', code:'MD1', team:'Anonymous Juniors', pts:10,wins:0,pods:0,dnf:0,pos:19,gap:'-218',form:[]},
-      {name:'Kriekel', code:'RD1', team:'LMP', pts:8,wins:0,pods:0,dnf:0,pos:20,gap:'-220',form:[]},
-      {name:'Halo', code:'MD2', team:'Anonymous Juniors', pts:4,wins:0,pods:0,dnf:0,pos:21,gap:'-224',form:[]},
-      {name:'Wibz', code:'—', team:'Carti Racing Association F3', pts:4,wins:0,pods:0,dnf:0,pos:22,gap:'-224',form:[]},
-      {name:'LJS', code:'MD3', team:'Anonymous Juniors', pts:3,wins:0,pods:0,dnf:0,pos:23,gap:'-225',form:[]},
-      {name:'Lance', code:'MD3', team:'Aston Martin Racing F3', pts:2,wins:0,pods:0,dnf:0,pos:24,gap:'-226',form:[]},
-      {name:'Maslo', code:'MD3', team:'Aston Martin Racing F3', pts:2,wins:0,pods:0,dnf:0,pos:25,gap:'-226',form:[]},
-      {name:'Bence', code:'—', team:'GlitchGP F3', pts:2,wins:0,pods:0,dnf:0,pos:26,gap:'-226',form:[]},
-    ],
-    constructors: [
-      {name:'LMP', color:'#a78bfa', pts:474, pos:1},
-      {name:"Tarigy’s Motorsport Team F3", color:'#7b2cbf', pts:226, pos:2},
-      {name:'Pola Sabre Motorsports', color:'#22b8d6', pts:160, pos:3},
-      {name:'Carti Racing Association', color:'#555555', pts:126, pos:4},
-      {name:'Renault Sport Formula 3 Team', color:'#d9a300', pts:107, pos:5},
-      {name:'Aston Martin Racing F3', color:'#1f6b3a', pts:73, pos:6},
-      {name:'GlitchGP F3', color:'#8e3bb5', pts:43, pos:7},
-      {name:'Aero Apex Racing F3', color:'#2496d2', pts:34, pos:8},
-      {name:'Kogun Technologies F3 Team', color:'#2496d2', pts:18, pos:9},
-      {name:'Anonymous Juniors', color:'#dc143c', pts:13, pos:10}
-    ],
-  },
+*/
+let STANDINGS_DATA = {
+  f1: { drivers: [], constructors: [] },
+  f2: { drivers: [], constructors: [] },
+  f3: { drivers: [], constructors: [] },
 };
+window.STANDINGS_DATA = STANDINGS_DATA;
+
 
 /* ═══ INFO DATA (teams & drivers per series) ═══ */
-const INFO_DATA = {
-  f1: {
-    teams: [
-      {name:'Richard Mille LM Motorsport F1', engine:'CEO: Mikos | LM CEO · Director: Lawie (Gay Bitch)', color:'#a78bfa', drivers:[
-        {num:'19', code:'MD1', name:'Peters', pts:0, wins:0, pods:0},
-        {num:'1', code:'MD2', name:'Lory', pts:0, wins:0, pods:0},
-        {num:'03', code:'RD2', name:'Skirmis', pts:0, wins:0, pods:0},
-      ]},
-      {name:'Scuderia Ferrari', engine:'CEO: pringle-i luv jem,jamie,silk,age', color:'#dc143c', drivers:[
-        {num:'—', code:'MD1', name:'Nick', pts:0, wins:0, pods:0},
-        {num:'12', code:'MD2', name:'Ageftyg2', pts:0, wins:0, pods:0},
-        {num:'67', code:'RD1', name:'Vitality', pts:0, wins:0, pods:0},
-      ]},
-      {name:'Vodafone McLaren', engine:'CEO: Neon | McLaren & Israel CEO · Director: Zachary | McLaren Director', color:'#ff8000', drivers:[
-        {num:'27', code:'MD1', name:'gkf', pts:0, wins:0, pods:0},
-        {num:'17_HB46', code:'MD2', name:'theo', pts:0, wins:0, pods:0},
-        {num:'—', code:'RD1', name:'Veyro', pts:0, wins:0, pods:0},
-      ]},
-      {name:'Renault Sport Formula 1 Team', engine:'CEO: Neon | McLaren & Israel CEO', color:'#60a5fa', drivers:[
-        {num:'93', code:'MD1', name:'Amin', pts:0, wins:0, pods:0},
-        {num:'—', code:'MD2', name:'Dan', pts:0, wins:0, pods:0},
-      ]},
-      {name:'Aero Apex Racing', engine:'CEO: Flekzy | Aero CEO · Director: Ernesto2013 | AAR Team Director', color:'#7c3aed', drivers:[
-        {num:'41', code:'MD1', name:'Karazu Arin', pts:0, wins:0, pods:0},
-        {num:'44', code:'MD2', name:'Joshua', pts:0, wins:0, pods:0},
-        {num:'—', code:'RD1', name:'Flare (@Dr_DapperBowtie)', pts:0, wins:0, pods:0},
-        {num:'81', code:'RD2', name:'infinity', pts:0, wins:0, pods:0},
-      ]},
-      {name:'Mercedes-AMG', engine:'CEO: LeYeetBoi | Merc & GlitchGP CEO · Director: Kuzey | Merc Director', color:'#00d2be', drivers:[
-        {num:'14', code:'MD1', name:'Unironically', pts:0, wins:0, pods:0},
-        {num:'98', code:'MD2', name:'Emirovic', pts:0, wins:0, pods:0},
-        {num:'7', code:'RD1', name:'Leo', pts:0, wins:0, pods:0},
-      ]},
-      {name:'Hertz Porsche', engine:'CEO: yake | JHP - ATP CEO', color:'#b9a96a', drivers:[
-        {num:'15', code:'MD1', name:'Sun_Rise', pts:0, wins:0, pods:0},
-        {num:'17', code:'MD2', name:'Igorexe', pts:0, wins:0, pods:0},
-        {num:'—', code:'RD1', name:'luddster (@luddestuttar)', pts:0, wins:0, pods:0},
-      ]},
-      {name:'Vanguard Sabre Motorsport', engine:'CEO: POnight_LAlloy', color:'#7f1010', drivers:[
-        {num:'79', code:'MD1', name:'Daih', pts:0, wins:0, pods:0},
-        {num:'25', code:'MD2', name:'Waffle', pts:0, wins:0, pods:0},
-      ]},
-      {name:'GlitchGP F1 Team', engine:'CEO: LeYeetBoi | Merc & GlitchGP CEO · Director: CJ | GlitchGP Director', color:'#8e3bb5', drivers:[
-        {num:'43', code:'MD1', name:'yokesecapo', pts:0, wins:0, pods:0},
-        {num:'20', code:'MD2', name:'SCKIBLES', pts:0, wins:0, pods:0},
-        {num:'22', code:'RD1', name:'Yuki', pts:0, wins:0, pods:0},
-        {num:'60', code:'RD2', name:'El_krazy', pts:0, wins:0, pods:0},
-      ]},
-      {name:"Tarigy's Motorsport Team F1", engine:"CEO: Flande | Tarigy's CEO", color:'#1438d4', drivers:[
-        {num:'26', code:'MD1', name:'ShadowRex', pts:0, wins:0, pods:0},
-        {num:'92', code:'MD2', name:'Maldonado', pts:0, wins:0, pods:0},
-        {num:'0', code:'RD1', name:'Octi', pts:0, wins:0, pods:0},
-      ]},
-      {name:'BMW Sauber F1 Team', engine:'CEO: Jamie | BMW Sauber CEO · Director: G spot', color:'#7dd3fc', drivers:[
-        {num:'48', code:'MD1', name:'Sly', pts:0, wins:0, pods:0},
-        {num:'9', code:'MD2', name:'Vein Blong', pts:0, wins:0, pods:0},
-      ]},
-    ]
-  },
-  f2: {
-    teams: [
-      {name:'LM Performance F2', engine:'CEO: Mikos | LM CEO · Director: Lawie (Gay Bitch)', color:'#a78bfa', drivers:[
-        {num:'03', code:'MD1', name:'Skirmis', pts:0, wins:0, pods:0},
-        {num:'19', code:'MD2', name:'Peters', pts:0, wins:0, pods:0},
-        {num:'91', code:'RD1', name:'Ukizi', pts:0, wins:0, pods:0},
-      ]},
-      {name:'Renault Sport Formula 2 Team', engine:'CEO: Neon | McLaren & Isreal CEO', color:'#d9a300', drivers:[
-        {num:'23', code:'MD1', name:'Gamrin', pts:0, wins:0, pods:0},
-        {num:'29', code:'MD2', name:'Gui', pts:0, wins:0, pods:0},
-      ]},
-      {name:"Tarigy's Motorsport Team F2", engine:"CEO: Flande | Tarigy's CEO · Director: Lauu's lover | Tarigy's Director", color:'#7b2cbf', drivers:[
-        {num:'0', code:'MD1', name:'Octi', pts:0, wins:0, pods:0},
-        {num:'—', code:'MD2', name:'dante', pts:0, wins:0, pods:0},
-      ]},
-      {name:'AF Corsa', engine:'CEO: pringle-i luv jem,jamie,silk,age', color:'#ef0000', drivers:[
-        {num:'52', code:'MD1', name:'Dino', pts:0, wins:0, pods:0},
-        {num:'22', code:'MD2', name:'ZAYN', pts:0, wins:0, pods:0},
-        {num:'18', code:'RD1', name:'Halo', pts:0, wins:0, pods:0},
-        {num:'—', code:'RD2', name:'Boj', pts:0, wins:0, pods:0},
-      ]},
-      {name:'GlitchGP F2 Team', engine:'CEO: LeYeetBoi | Merc & GlitchGP CEO · Director: CJ | GlitchGP Director', color:'#8e3bb5', drivers:[
-        {num:'—', code:'MD1', name:'The Wind', pts:0, wins:0, pods:0},
-        {num:'22', code:'MD2', name:'Yuki', pts:0, wins:0, pods:0},
-        {num:'33', code:'RD1', name:'RuTa', pts:0, wins:0, pods:0},
-      ]},
-      {name:'Vanguard Sabre Racing', engine:'CEO: POnight_LAlloy', color:'#7f1010', drivers:[
-        {num:'27', code:'MD1', name:'Lewis', pts:0, wins:0, pods:0},
-        {num:'97', code:'MD2', name:'Nahim', pts:0, wins:0, pods:0},
-        {num:'41', code:'RD1', name:'Penguin', pts:0, wins:0, pods:0},
-        {num:'36', code:'RD2', name:'Jimmy', pts:0, wins:0, pods:0},
-      ]},
-      {name:'Aero Apex Racing F2', engine:'CEO: Flekzy | Aero CEO', color:'#2496d2', drivers:[
-        {num:'10', code:'MD1', name:'EXO_Kyo', pts:0, wins:0, pods:0},
-        {num:'—', code:'MD2', name:'Fb', pts:0, wins:0, pods:0},
-        {num:'—', code:'MD3', name:'Hazza', pts:0, wins:0, pods:0},
-      ]},
-      {name:'Racing Point F2', engine:'CEO: G spot', color:'#d100ff', drivers:[
-        {num:'—', code:'MD1', name:'Pear', pts:0, wins:0, pods:0},
-        {num:'55', code:'RD1', name:'JULES', pts:0, wins:0, pods:0},
-      ]},
-      {name:'Carti Racing Association', engine:'CEO: Tiyu | Carti CEO · Director: Zak', color:'#555555', drivers:[
-        {num:'1', code:'MD1', name:'Juantoes', pts:0, wins:0, pods:0},
-        {num:'26', code:'MD2', name:'Crocs', pts:0, wins:0, pods:0},
-        {num:'—', code:'RD2', name:'jeremiah_spookie', pts:0, wins:0, pods:0},
-      ]},
-      {name:'Nissan Nissmo', engine:'CEO: Ford | Nissan CEO · Director: Alone | NRX Director', color:'#dbe4cf', drivers:[
-        {num:'95', code:'MD1', name:'Alien', pts:0, wins:0, pods:0},
-        {num:'24', code:'MD2', name:'Zaphira', pts:0, wins:0, pods:0},
-        {num:'15', code:'RD2', name:'Vittorioso', pts:0, wins:0, pods:0},
-      ]},
-      {name:'BMW Sauber F2 Team', engine:'CEO: Jamie | BMW Sauber CEO', color:'#7dd3fc', drivers:[
-        {num:'<46>', code:'MD1', name:'HB~', pts:0, wins:0, pods:0},
-        {num:'17', code:'MD2', name:'AO', pts:0, wins:0, pods:0},
-      ]},
-    ]
-  },
-  f3: {
-    drivers: [
-      {name:'Piko', code:'MD2', team:'LMP',                          pts:113,wins:1,pods:6,dnf:0,pos:1,gap:'0',form:['','W','','','','']},
-      {name:'Jeffz', code:'MD2', team:'Force India F1 Team F3',       pts:67,wins:1,pods:3,dnf:0,pos:2,gap:'-46',form:['','','','W']},
-      {name:'Ukizi', code:'—', team:'LMP',                            pts:60,wins:1,pods:2,dnf:0,pos:3,gap:'-53',form:['','','','W','']},
-      {name:'Peters', code:'MD2', team:"Tarigy's Motorsport Team",   pts:45,wins:0,pods:1,dnf:0,pos:4,gap:'-68',form:['','','','','']},
-      {name:'ukkiett', code:'MD2', team:'Carti Racing Association F3',pts:39,wins:0,pods:0,dnf:0,pos:5,gap:'-74',form:['','','','']},
-      {name:'Bartos', code:'MD1', team:'Aero Apex Racing F3',        pts:36,wins:0,pods:0,dnf:0,pos:6,gap:'-77',form:['','','','']},
-      {name:'Fabián', code:'MD3', team:"Tarigy's Motorsport Team F3",     pts:30,wins:0,pods:1,dnf:0,pos:7,gap:'-83',form:['','','','','','']},
-      {name:'Maldonado', code:'MD3', team:"Tarigy's Motorsport Team", pts:21,wins:1,pods:1,dnf:0,pos:8,gap:'-92',form:['W']},
-      {name:'ShadowRex', code:'MD1', team:"Tarigy's Motorsport Team",pts:20,wins:0,pods:0,dnf:0,pos:9,gap:'-93',form:['','']},
-      {name:'Dark Shadow', code:'—', team:'Pola Sabre Motorsports',          pts:18,wins:1,pods:1,dnf:0,pos:10,gap:'-95',form:['W']},
-      {name:'Lance', code:'MD3', team:'Aston Martin Racing F3',        pts:16,wins:0,pods:0,dnf:0,pos:11,gap:'-97',form:['','']},
-      {name:'shawn', code:'MD2', team:'Renault Sports Formula 1 Team F3',      pts:14,wins:0,pods:0,dnf:0,pos:12,gap:'-99',form:['','']},
-      {name:'Swixks', code:'MD3', team:'Carti Racing Association F3',pts:8,wins:0,pods:0,dnf:0,pos:13,gap:'-105',form:['','','']},
-      {name:'Inert', code:'MD2', team:'Anonymous Juniors',            pts:6,wins:0,pods:0,dnf:1,pos:14,gap:'-107',form:['','','']},
-      {name:'ellie', code:'—', team:'Chonkebee Racing F3',           pts:4,wins:0,pods:0,dnf:0,pos:15,gap:'-109',form:['','']},
-      {name:'Nath', code:'MD2', team:'Fast Line Motorsport F3 Team',       pts:2,wins:0,pods:0,dnf:0,pos:16,gap:'-111',form:['','']},
-      {name:'Ajp', code:'MD1', team:'Pola Sabre Motorsports',        pts:0,wins:0,pods:0,dnf:0,pos:17,gap:'-113',form:['','']},
-      {name:'Gambia_pole', code:'MD2', team:'Pola Sabre Motorsports',pts:0,wins:0,pods:0,dnf:0,pos:18,gap:'-113',form:['']},
-      {name:'Weee', code:'MD2', team:'GlitchGP',                      pts:0,wins:0,pods:0,dnf:1,pos:19,gap:'-113',form:['']},
-      {name:'Felipe', code:'RD1', team:'Carti Racing Association F3', pts:0,wins:0,pods:0,dnf:0,pos:20,gap:'-113',form:[]},
-      {name:'Spooky', code:'MD2', team:'Aero Apex Racing F3',         pts:0,wins:0,pods:0,dnf:0,pos:21,gap:'-113',form:[]},
-      {name:'Jsko', code:'—', team:'Chonkebee Racing F3',             pts:0,wins:0,pods:0,dnf:0,pos:22,gap:'-113',form:['']},
-      {name:'Jimmy', code:'—', team:'Pola Sabre Motorsports',         pts:0,wins:0,pods:0,dnf:0,pos:23,gap:'-113',form:['']},
-      {name:'Boby', code:'—', team:'Fast Line Motorsport F3 Team',                pts:0,wins:0,pods:0,dnf:0,pos:24,gap:'-113',form:['']},
-      {name:'Davis', code:'—', team:'Carti Racing Association F3',               pts:0,wins:0,pods:0,dnf:1,pos:25,gap:'-113',form:['']},
-      {name:'Fred', code:'—', team:'Force India F1 Team F3',                pts:0,wins:0,pods:0,dnf:0,pos:26,gap:'-113',form:['']},
-    ],
-    teams: [
-      {name:'LM Performance F3', color:'#a78bfa', drivers:[
-        {num:'53',code:'MD1',name:'Piko'},{num:'—',code:'MD2',name:'—'},{num:'99',code:'MD3',name:'Jeffz'},{num:'21',code:'RD1',name:'Kriekel'}]},
-      {name:"Tarigy's Motorsport Team F3", color:'#f59e0b', drivers:[
-        {num:'11',code:'MD1',name:'Fabián'},{num:'27',code:'MD2',name:'Lancelot'},{num:'—',code:'MD3',name:'El_Manco010'},{num:'—',code:'RD1',name:'—'}]},
-      {name:'Aston Martin Racing F3', color:'#22c55e', drivers:[
-        {num:'5',code:'MD1',name:'Sam'},{num:'21',code:'MD2',name:'Tta'},{num:'88',code:'MD3',name:'Maslo'},{num:'78',code:'RD1',name:'Mikey'}]},
-      {name:'Renault Sport Formula 3 Team', color:'#60a5fa', drivers:[
-        {num:'—',code:'MD1',name:'—'},{num:'—',code:'MD2',name:'—'},{num:'55',code:'MD3',name:'Rice'}]},
-      {name:'Carti Racing Association F3', color:'#ec4899', drivers:[
-        {num:'3',code:'MD1',name:'ukkiett'},{num:'77',code:'MD2',name:'Wibz'},{num:'57',code:'MD3',name:'Dannell'},{num:'13',code:'RD1',name:'Chipi Menor'}]},
-      {name:'Aero Apex Racing F3', color:'#7c3aed', drivers:[
-        {num:'77',code:'MD1',name:'Nyiko'},{num:'—',code:'MD2',name:'Elden'},{num:'95',code:'MD3',name:'BETICOSSS'},{num:'—',code:'RD1',name:'—'}]},
-      {name:'Pola Sabre Motorsports', color:'#1e40af', drivers:[
-        {num:'28',code:'MD1',name:'Dark Shadow'},{num:'10',code:'MD2',name:'Elf'},{num:'04',code:'MD3',name:'Bartos'},{num:'—',code:'RD1',name:'—'}]},
-      {name:'Anonymous Juniors', color:'#dc143c', drivers:[
-        {num:'56',code:'MD1',name:'Piti'},{num:'18',code:'MD2',name:'Halo'},{num:'—',code:'MD3',name:'unknown-user'},{num:'1',code:'RD1',name:'Majd'}]},
-      {name:'Kogun Technologies F3 Team', color:'#eab308', drivers:[
-        {num:'45',code:'MD1',name:'ellie'},{num:'96',code:'MD2',name:'Avda'},{num:'45',code:'MD3',name:'Marin'},{num:'—',code:'RD1',name:'Dunstsoocerking4'}]},
-      {name:'BMW Sauber F3 Team', color:'#7dd3fc', drivers:[
-        {num:'5',code:'MD1',name:'Kashin'},{num:'55',code:'MD2',name:'Roven'},{num:'17',code:'MD3',name:'Genghis'},{num:'—',code:'RD1',name:'—'}]},
-      {name:'GlitchGP F3', color:'#00d2be', drivers:[
-        {num:'19',code:'MD1',name:'Hakeman'},{num:'77',code:'MD2',name:'Bence'},{num:'34',code:'MD3',name:'syxe'},{num:'15',code:'RD1',name:'Leo'}]},
-    ],
-    constructors: [
-      {name:'LMP',                         color:'#a78bfa', pts:258, pos:1},
-      {name:"Tarigy's Motorsport Team",    color:'#f59e0b', pts:104, pos:2},
-      {name:'Force India F1 Team F3',       color:'#22c55e', pts:83, pos:3},
-      {name:'Renault Sports Formula 1 Team F3',      color:'#60a5fa', pts:74, pos:4},
-      {name:'Carti Racing Association F3', color:'#ec4899', pts:47, pos:5},
-      {name:'Aero Apex Racing F3',         color:'#7c3aed', pts:36, pos:6},
-      {name:'Pola Sabre Motorsports',      color:'#1e40af', pts:32, pos:7},
-      {name:'Anonymous Juniors',           color:'#dc143c', pts:6,  pos:8},
-      {name:'Chonkebee Racing F3',         color:'#eab308', pts:4,  pos:9},
-      {name:'Fast Line Motorsport F3 Team',      color:'#84cc16', pts:2,  pos:10},
-      {name:'GlitchGP',                    color:'#00d2be', pts:0,  pos:11},
-    ],
-  },
+let INFO_DATA = {
+  f1: { teams: [] },
+  f2: { teams: [] },
+  f3: { teams: [] },
 };
+window.INFO_DATA = INFO_DATA;
+
 
 /* ═══ NAV ═══ */
 let currentRaceIdx_nav = null;
 let currentPage = 'home';
 let currentSeries = localStorage.getItem('vnfs_current_series') || 'f1';
-const SERIES_META = {
-  f1:  {label:'Formula 1',  full:'VMS F1',  badgeClass:'sd-f1',  tag:'Pinnacle Series',      teams:'12', people:'20',  peopleLbl:'Drivers', rounds:'16', countries:'20+', desc:'Formula 1 is the pinnacle of motorsport, where the world\'s top drivers compete with sheer speed and technical excellence.'},
-  f2:  {label:'Formula 2',  full:'VMS F2',  badgeClass:'sd-f2',  tag:'Elite Development',    teams:'10', people:'22',  peopleLbl:'Drivers', rounds:'16', countries:'20+', desc:'The final step before Formula 1 — elite development racing that builds the next generation of VMS champions.'},
-  f3:  {label:'Formula 3',  full:'VMS F3',  badgeClass:'sd-f3',  tag:'Rising Stars',         teams:'10', people:'30',  peopleLbl:'Drivers', rounds:'16', countries:'20+', desc:'The entry point to VMS open-wheel racing, where rising stars begin their climb up the ladder.'},
+let SERIES_META = {
+  f1: { label: 'Formula 1', full: 'VMS F1', badgeClass: 'sd-f1', tag: 'Pinnacle Series', teams: '0', people: '0', peopleLbl: 'Drivers', rounds: '0', countries: '0', desc: '' },
+  f2: { label: 'Formula 2', full: 'VMS F2', badgeClass: 'sd-f2', tag: 'Elite Development', teams: '0', people: '0', peopleLbl: 'Drivers', rounds: '0', countries: '0', desc: '' },
+  f3: { label: 'Formula 3', full: 'VMS F3', badgeClass: 'sd-f3', tag: 'Rising Stars', teams: '0', people: '0', peopleLbl: 'Drivers', rounds: '0', countries: '0', desc: '' },
 };
+window.SERIES_META = SERIES_META;
+
 function setCurrentSeries(s){
   if(!SERIES_META[s] || s===currentSeries){
     document.querySelectorAll('.rs-switcher.open').forEach(w=>w.classList.remove('open'));
@@ -7123,8 +6781,22 @@ function resultRoundKey(idx, series){
   return `${round}-${series}`;
 }
 function getResultsFor(idx, series){
-  const key = resultRoundKey(idx, series);
-  return RESULTS[key] || [];
+  const race = RACES[idx];
+  const round = race && race.rnd ? race.rnd : String(idx).padStart(2,'0');
+  const raceId = race && race.id ? String(race.id) : '';
+  const variants = new Set([
+    `${round}-${series}`,
+    `${raceId}-${series}`,
+    `${raceId ? raceId.replace(/^r_/, '') : round}-${series}`,
+    `${series}-${round}`
+  ]);
+
+  for (const key of variants) {
+    const value = RESULTS[key];
+    if (Array.isArray(value) && value.length) return value;
+  }
+
+  return [];
 }
 function getPodiumFor(idx, series){
   let results = getResultsFor(idx, series);

@@ -7,7 +7,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
 
 function extractConst(name) {
-  const re = new RegExp(`const ${name}\\s*=`);
+  const re = new RegExp(`(?:const|let|var)\\s+${name}\\s*=`);
   const m = re.exec(html);
   if (!m) throw new Error('missing ' + name);
   const start = m.index;
