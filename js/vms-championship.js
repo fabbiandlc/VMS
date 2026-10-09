@@ -160,9 +160,23 @@
 
   function recomputeSeries(series) {
     ensureSeriesBuckets(series);
-    initCarryover();
     const drivers = global.STANDINGS_DATA[series].drivers;
     const cons = global.STANDINGS_DATA[series].constructors;
+    const hasPersistedPoints = drivers.some(d => Number.isFinite(Number(d.pts)) && d.pts !== null && d.pts !== undefined);
+    if (hasPersistedPoints) {
+      drivers.sort((a, b) => (Number(b.pts) || 0) - (Number(a.pts) || 0));
+      const top = drivers[0] ? Number(drivers[0].pts) || 0 : 0;
+      drivers.forEach((d, i) => {
+        d.pos = i + 1;
+        d.gap = i === 0 ? '0' : `-${top - (Number(d.pts) || 0)}`;
+        if (!Array.isArray(d.form)) d.form = [];
+      });
+      cons.sort((a, b) => (Number(b.pts) || 0) - (Number(a.pts) || 0));
+      cons.forEach((c, i) => { c.pos = i + 1; });
+      return;
+    }
+
+    initCarryover();
     drivers.forEach(d => {
       d._computed = 0; d.wins = 0; d.pods = 0; d.dnf = 0; d._poles = 0; d._fls = 0; d._form = [];
     });

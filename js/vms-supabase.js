@@ -158,6 +158,7 @@
   function buildInfoData(seriesRows, teamsRows, driversRows) {
     const info = {};
     const teamMap = new Map();
+    const allTeamsBySeries = new Map();
 
     const allSeries = seriesRows && seriesRows.length ? seriesRows : Object.keys(window.SERIES_META || {});
     allSeries.forEach((rowOrSeriesKey) => {
@@ -180,6 +181,8 @@
       };
       info[seriesId].teams.push(teamEntry);
       teamMap.set(String(team.id || teamEntry.name), teamEntry);
+      if (!allTeamsBySeries.has(seriesId)) allTeamsBySeries.set(seriesId, new Map());
+      allTeamsBySeries.get(seriesId).set(String(team.id || teamEntry.name), teamEntry);
     });
 
     driversRows.forEach((driver) => {
@@ -201,8 +204,8 @@
         matchedTeam = info[seriesId].teams.find((team) => normalizeKey(team.name) === normalizeKey(teamName));
       }
       if (!matchedTeam && driver.team_id) {
-        const byId = [...teamMap.entries()].find(([key, value]) => key === String(driver.team_id));
-        matchedTeam = byId ? byId[1] : null;
+        const byId = allTeamsBySeries.get(seriesId)?.get(String(driver.team_id));
+        matchedTeam = byId || null;
       }
       if (!matchedTeam && info[seriesId].teams.length) {
         matchedTeam = info[seriesId].teams[0];
@@ -231,14 +234,40 @@
       standings[seriesId] = { drivers: [], constructors: [] };
     });
 
+    const driverIndexById = new Map();
+    (driversRows || []).forEach((driver) => {
+      const seriesId = safeText(driver.series_id || driver.seriesId || driver.series || 'f1', 'f1').toLowerCase();
+      const driverId = safeText(driver.id || driver.driver_id || driver.driverId || '', '');
+      const driverName = buildDriverLabel(driver.name, 'Unknown Driver');
+      if (driverId) driverIndexById.set(`${seriesId}:${normalizeKey(driverId)}`, driverName);
+    });
+
+    const teamIndexById = new Map();
+    (teamsRows || []).forEach((team) => {
+      const seriesId = safeText(team.series_id || team.seriesId || team.series || 'f1', 'f1').toLowerCase();
+      const teamId = safeText(team.id || team.team_id || team.teamId || '', '');
+      const teamName = safeText(team.name || team.team_name || team.teamName || 'Unknown Team', 'Unknown Team');
+      if (teamId) teamIndexById.set(`${seriesId}:${normalizeKey(teamId)}`, teamName);
+    });
+
     const driverPointsBySeries = new Map();
     driverStandingsRows.forEach((row) => {
       const seriesId = safeText(row.series_id || row.seriesId || row.series || 'f1', 'f1').toLowerCase();
-      const driverName = buildDriverLabel(row.driver_name || row.driverName || row.name, 'Unknown Driver');
+      const driverId = safeText(row.driver_id || row.driverId || row.id || '', '');
+      let driverName = buildDriverLabel(row.driver_name || row.driverName || row.name, 'Unknown Driver');
+      if (driverId && !driverName || driverName === 'Unknown Driver') {
+        driverName = driverIndexById.get(`${seriesId}:${normalizeKey(driverId)}`) || driverName;
+      }
+      if (!driverName || driverName === 'Unknown Driver') {
+        const fallbackName = safeText(row.driver_name || row.driverName || row.name || '', 'Unknown Driver');
+        driverName = fallbackName === 'Unknown Driver' ? `driver-${normalizeKey(driverId || String(Math.random()))}` : fallbackName;
+      }
+      const resolvedRowTeam = safeText(row.team_name || row.teamName || '', '');
+      const fallbackRowTeam = teamIndexById.get(`${seriesId}:${normalizeKey(row.team_id || row.teamId || '')}`) || '';
       if (!driverPointsBySeries.has(seriesId)) driverPointsBySeries.set(seriesId, new Map());
       driverPointsBySeries.get(seriesId).set(normalizeKey(driverName), {
         name: driverName,
-        team: safeText(row.team_name || row.teamName || '', '—'),
+        team: safeText(resolvedRowTeam || fallbackRowTeam || '', '—'),
         pts: Number(row.pts) || 0,
         wins: Number(row.wins) || 0,
         pods: Number(row.pods) || 0,
@@ -254,7 +283,11 @@
     const teamPointsBySeries = new Map();
     constructorStandingsRows.forEach((row) => {
       const seriesId = safeText(row.series_id || row.seriesId || row.series || 'f1', 'f1').toLowerCase();
-      const teamName = safeText(row.team_name || row.teamName || row.name || '', 'Unknown Team');
+      const teamId = safeText(row.team_id || row.teamId || row.id || '', '');
+      let teamName = safeText(row.team_name || row.teamName || row.name || '', 'Unknown Team');
+      if (teamId && (!teamName || teamName === 'Unknown Team')) {
+        teamName = teamIndexById.get(`${seriesId}:${normalizeKey(teamId)}`) || teamName;
+      }
       if (!teamPointsBySeries.has(seriesId)) teamPointsBySeries.set(seriesId, new Map());
       teamPointsBySeries.get(seriesId).set(normalizeKey(teamName), {
         name: teamName,
@@ -268,7 +301,9 @@
       const seriesId = safeText(driver.series_id || driver.seriesId || driver.series || 'f1', 'f1').toLowerCase();
       const driverName = buildDriverLabel(driver.name, 'Unknown Driver');
       const key = normalizeKey(driverName);
-      const teamName = safeText(driver.team_name || driver.teamName || '', '—');
+      const resolvedTeamId = safeText(driver.team_id || driver.teamId || '', '');
+      const referencedTeamName = resolvedTeamId ? teamIndexById.get(`${seriesId}:${normalizeKey(resolvedTeamId)}`) || '' : '';
+      const teamName = safeText(driver.team_name || driver.teamName || referencedTeamName || '', '—');
       const rowData = driverPointsBySeries.get(seriesId)?.get(key) || {
         name: driverName,
         team: teamName,
@@ -282,11 +317,12 @@
         gap: '0',
         form: [],
       };
+      const finalTeam = (rowData.team && rowData.team !== '—' && rowData.team !== 'Unknown Team') ? rowData.team : (teamName && teamName !== '—' && teamName !== 'Unknown Team' ? teamName : '—');
       standings[seriesId].drivers.push({
         name: driverName,
         code: safeText(driver.code || '', ''),
         num: safeText(driver.num || '', '—'),
-        team: rowData.team || teamName || '—',
+        team: finalTeam,
         pts: Number(rowData.pts) || 0,
         wins: Number(rowData.wins) || 0,
         pods: Number(rowData.pods) || 0,
@@ -297,7 +333,32 @@
       });
     });
 
-    if (resultsRows && resultsRows.length) {
+    constructorStandingsRows.forEach((row) => {
+      const seriesId = safeText(row.series_id || row.seriesId || row.series || 'f1', 'f1').toLowerCase();
+      const teamId = safeText(row.team_id || row.teamId || row.id || '', '');
+      let teamName = safeText(row.team_name || row.teamName || row.name || '', 'Unknown Team');
+      if (teamId && (!teamName || teamName === 'Unknown Team')) {
+        teamName = teamIndexById.get(`${seriesId}:${normalizeKey(teamId)}`) || teamName;
+      }
+      const list = standings[seriesId].constructors || [];
+      const idx = list.findIndex((entry) => normalizeKey(entry.name) === normalizeKey(teamName));
+      const builtEntry = {
+        name: teamName,
+        color: safeText(row.color || '', '#888888'),
+        pts: Number(row.pts) || 0,
+        pos: Number(row.pos) || 0,
+      };
+      if (idx >= 0) {
+        list[idx] = builtEntry;
+      } else {
+        list.push(builtEntry);
+      }
+      standings[seriesId].constructors = list;
+    });
+
+    const hasDriverStandings = Array.from(driverPointsBySeries.values()).some((seriesMap) => seriesMap.size > 0);
+
+    if (!hasDriverStandings && resultsRows && resultsRows.length) {
       const aggregateDriver = new Map();
       const aggregateTeam = new Map();
 
@@ -348,12 +409,12 @@
           const list = standings[seriesId].drivers || [];
           const idx = list.findIndex((entry) => normalizeKey(entry.name) === normalizeKey(driverResult.name));
           if (idx >= 0) {
-            list[idx].pts = (Number(list[idx].pts) || 0) + (Number(driverResult.pts) || 0);
-            list[idx].wins = (Number(list[idx].wins) || 0) + (Number(driverResult.wins) || 0);
-            list[idx].pods = (Number(list[idx].pods) || 0) + (Number(driverResult.pods) || 0);
-            list[idx].dnf = (Number(list[idx].dnf) || 0) + (Number(driverResult.dnf) || 0);
+            list[idx].pts = Number(driverResult.pts) || 0;
+            list[idx].wins = Number(driverResult.wins) || 0;
+            list[idx].pods = Number(driverResult.pods) || 0;
+            list[idx].dnf = Number(driverResult.dnf) || 0;
             list[idx].team = driverResult.team || list[idx].team || '—';
-            list[idx].form = (list[idx].form || []).concat(driverResult.form || []).slice(-5);
+            list[idx].form = (driverResult.form || []).slice(-5);
           } else {
             list.push({
               name: driverResult.name,
@@ -377,7 +438,7 @@
           const list = standings[seriesId].constructors || [];
           const idx = list.findIndex((entry) => normalizeKey(entry.name) === normalizeKey(teamEntry.name));
           if (idx >= 0) {
-            list[idx].pts = (Number(list[idx].pts) || 0) + (Number(teamEntry.pts) || 0);
+            list[idx].pts = Number(teamEntry.pts) || 0;
           } else {
             list.push({
               name: teamEntry.name,
@@ -499,7 +560,105 @@
     syncFromSupabase,
     pullFromSupabase: syncFromSupabase,
     pushLive: async function () {
-      return false;
+      if (!SUPABASE_ENABLED) return false;
+
+      try {
+        const standings = window.STANDINGS_DATA || {};
+        const seriesIds = Object.keys(standings);
+        const [driverRowsFromDb, teamRowsFromDb] = await Promise.all([
+          fetchTable('drivers', '*').catch(() => []),
+          fetchTable('teams', '*').catch(() => [])
+        ]);
+
+        const driverIdByKey = new Map();
+        (driverRowsFromDb || []).forEach((row) => {
+          const seriesId = safeText(row.series_id || row.seriesId || row.series || '', '').toLowerCase();
+          const name = safeText(row.name || row.driver_name || row.driverName || '', '');
+          if (!seriesId || !name) return;
+          driverIdByKey.set(`${seriesId}:${normalizeKey(name)}`, row.id || '');
+        });
+
+        const teamIdByKey = new Map();
+        (teamRowsFromDb || []).forEach((row) => {
+          const seriesId = safeText(row.series_id || row.seriesId || row.series || '', '').toLowerCase();
+          const name = safeText(row.name || row.team_name || row.teamName || '', '');
+          if (!seriesId || !name) return;
+          teamIdByKey.set(`${seriesId}:${normalizeKey(name)}`, row.id || '');
+        });
+
+        const driverRows = [];
+        seriesIds.forEach((seriesId) => {
+          const list = standings[seriesId]?.drivers || [];
+          list.forEach((driver) => {
+            const name = safeText(driver.name || '', '');
+            if (!name) return;
+            const driverId = driverIdByKey.get(`${seriesId}:${normalizeKey(name)}`) || driver.driver_id || '';
+            if (!driverId) return;
+            driverRows.push({
+              driver_id: driverId,
+              series_id: seriesId,
+              pts: Number(driver.pts) || 0,
+              wins: Number(driver.wins) || 0,
+              pods: Number(driver.pods) || 0,
+              dnf: Number(driver.dnf) || 0,
+              poles: Number(driver.poles) || 0,
+              fls: Number(driver.fls) || 0,
+              pos: Number(driver.pos) || 0,
+              gap: safeText(driver.gap || '', '0'),
+              form: Array.isArray(driver.form) ? driver.form : [],
+            });
+          });
+        });
+
+        const constructorRows = [];
+        seriesIds.forEach((seriesId) => {
+          const list = standings[seriesId]?.constructors || [];
+          list.forEach((team) => {
+            const name = safeText(team.name || '', '');
+            if (!name) return;
+            const teamId = teamIdByKey.get(`${seriesId}:${normalizeKey(name)}`) || team.team_id || '';
+            if (!teamId) return;
+            constructorRows.push({
+              team_id: teamId,
+              series_id: seriesId,
+              pts: Number(team.pts) || 0,
+              pos: Number(team.pos) || 0,
+            });
+          });
+        });
+
+        const upsertRows = async (tableName, rows, conflictColumn) => {
+          if (!rows.length) return true;
+          const baseUrl = (cfg.supabaseUrl || '').replace(/\/+$/, '');
+          const url = `${baseUrl}/rest/v1/${tableName}?on_conflict=${encodeURIComponent(conflictColumn)}`;
+          const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+              apikey: cfg.supabaseAnonKey || '',
+              Authorization: `Bearer ${cfg.supabaseAnonKey || ''}`,
+              Accept: 'application/json',
+              'Content-Type': 'application/json',
+              Prefer: 'resolution=merge-duplicates',
+            },
+            body: JSON.stringify(rows),
+          });
+          if (!response.ok) {
+            throw new Error(`Supabase upsert failed for ${tableName}: ${response.status}`);
+          }
+          return true;
+        };
+
+        await Promise.all([
+          upsertRows('driver_standings', driverRows, 'driver_id'),
+          upsertRows('constructor_standings', constructorRows, 'team_id'),
+        ]);
+
+        console.info('[VMS] Standings pushed to Supabase.');
+        return true;
+      } catch (error) {
+        console.warn('[VMS] Supabase push failed.', error);
+        return false;
+      }
     },
     isEnabled: function () {
       return SUPABASE_ENABLED;

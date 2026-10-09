@@ -6,19 +6,19 @@ begin;
 insert into public.series (id, slug, name, full_name, tag, color, sort_order, points_table, bonus_fl, bonus_pole, session_day, session_time, meta) values (
     'f1', 'f1', 'Formula 1', 'VMS F1', 'Pinnacle Series', '#e8186d', 0,
     ARRAY[25,18,15,12,10,8,6,4,2,1]::int[], 1, 0,
-    'Saturday', '11:00 AM EST',
+    'Saturday', '9:25 AM EST',
     '{"teams":"12","people":"20","peopleLbl":"Drivers","rounds":"16","countries":"20+","desc":"Formula 1 is the pinnacle of motorsport, where the world''s top drivers compete with sheer speed and technical excellence.","badgeClass":"sd-f1"}'::jsonb
   );
 insert into public.series (id, slug, name, full_name, tag, color, sort_order, points_table, bonus_fl, bonus_pole, session_day, session_time, meta) values (
     'f2', 'f2', 'Formula 2', 'VMS F2', 'Elite Development', '#6699ff', 1,
     ARRAY[20,18,16,14,12,10,8,6,4,2,1]::int[], 0, 1,
-    'Saturday', '1:00 PM EST',
+    'Saturday', '11:20 AM EST',
     '{"teams":"10","people":"22","peopleLbl":"Drivers","rounds":"16","countries":"20+","desc":"The final step before Formula 1 — elite development racing that builds the next generation of VMS champions.","badgeClass":"sd-f2"}'::jsonb
   );
 insert into public.series (id, slug, name, full_name, tag, color, sort_order, points_table, bonus_fl, bonus_pole, session_day, session_time, meta) values (
     'f3', 'f3', 'Formula 3', 'VMS F3', 'Rising Stars', '#22d3ee', 2,
     ARRAY[20,18,16,14,12,10,8,6,4,2]::int[], 2, 1,
-    'Sunday', '11:00 AM EST',
+    'Sunday', 'TBD',
     '{"teams":"10","people":"30","peopleLbl":"Drivers","rounds":"16","countries":"20+","desc":"The entry point to VMS open-wheel racing, where rising stars begin their climb up the ladder.","badgeClass":"sd-f3"}'::jsonb
   );
 insert into public.races (id, rnd, name, circuit, sat_date, sun_date, status, flag, flag_code, sort_order, extra) values (
@@ -116,7 +116,7 @@ insert into public.race_series (race_id, series_id) values ('r_11', 'f2');
 insert into public.race_series (race_id, series_id) values ('r_11', 'f3');
 insert into public.races (id, rnd, name, circuit, sat_date, sun_date, status, flag, flag_code, sort_order, extra) values (
     'r_12', '12', 'United States Grand Prix', 'Circuit of the Americas', 'Sep 19', 'Sep 20',
-    'upcoming', '🇺🇸', 'us', 12,
+    'completed', '🇺🇸', 'us', 12,
     '{"rndBySeries":null}'::jsonb
   );
 insert into public.race_series (race_id, series_id) values ('r_12', 'f1');
@@ -124,7 +124,7 @@ insert into public.race_series (race_id, series_id) values ('r_12', 'f2');
 insert into public.race_series (race_id, series_id) values ('r_12', 'f3');
 insert into public.races (id, rnd, name, circuit, sat_date, sun_date, status, flag, flag_code, sort_order, extra) values (
     'r_13', '13', 'São Paulo Grand Prix', 'Autódromo José Carlos Pace', 'Sep 26', 'Sep 27',
-    'upcoming', '🇧🇷', 'br', 13,
+    'completed', '🇧🇷', 'br', 13,
     '{"rndBySeries":null}'::jsonb
   );
 insert into public.race_series (race_id, series_id) values ('r_13', 'f1');
@@ -140,7 +140,7 @@ insert into public.race_series (race_id, series_id) values ('r_14', 'f2');
 insert into public.race_series (race_id, series_id) values ('r_14', 'f3');
 insert into public.races (id, rnd, name, circuit, sat_date, sun_date, status, flag, flag_code, sort_order, extra) values (
     'r_15', '15', 'Mexico City Grand Prix', 'Autódromo Hermanos Rodríguez', 'Oct 10', 'Oct 11',
-    'upcoming', '🇲🇽', 'mx', 15,
+    'completed', '🇲🇽', 'mx', 15,
     '{"rndBySeries":null}'::jsonb
   );
 insert into public.race_series (race_id, series_id) values ('r_15', 'f1');
@@ -1623,6 +1623,7 @@ insert into public.race_results (race_id, series_id, driver_id, driver_name, tea
       2, 18, false, false,
       '', '5s Penalty', 'classified'
     );
+
 insert into public.race_results (race_id, series_id, driver_id, driver_name, team_name, pos, pts, fl, pole, gap, note, status) values (
       'r_10', 'f1', 'd_f1_sly', 'Sly', 'Sahara Force India F1 Team',
       3, 15, false, false,
