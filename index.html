@@ -8,7 +8,7 @@
 <link rel="shortcut icon" href="./favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="./favicon.svg">
 <script src="./js/vms-config.js"></script>
-<script src="./js/vms-supabase.js"></script>
+<script src="./js/vms-neon.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Anton&family=Caveat:wght@500;600&family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
@@ -776,13 +776,14 @@ body.admin-active .dr-drag{display:block;}
 .st-sort-btn:hover{border-color:var(--border2);color:var(--text2);}
 .st-sort-btn.active{background:var(--vnfs-grad);border-color:transparent;color:#fff;}
 .standings-table{padding:16px 32px 32px;}
-.st-head{display:grid;grid-template-columns:48px 1fr 90px 70px 80px 36px 36px 36px;gap:8px;padding:8px 16px;margin-bottom:4px;}
+.st-head{display:grid;grid-template-columns:48px minmax(0,1fr) 90px 70px 80px 36px 36px 36px;gap:8px;padding:8px 16px;margin-bottom:4px;}
 .sth{font-size:9px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--text3);}
 .sth.right{text-align:right;}
-.st-row{display:grid;grid-template-columns:48px 1fr 90px 80px 36px 36px 36px;gap:8px;align-items:center;padding:12px 16px;background:var(--surface);border:1px solid var(--border);border-radius:6px;margin-bottom:3px;transition:border-color .15s;}
+.st-row{display:grid;grid-template-columns:48px minmax(0,1fr) 90px 80px 36px 36px 36px;gap:8px;align-items:center;padding:12px 16px;background:var(--surface);border:1px solid var(--border);border-radius:6px;margin-bottom:3px;transition:border-color .15s;}
+.st-row > *{min-width:0;}
 .st-row:hover{border-color:var(--border2);}
 .st-row.leader{border-left:3px solid var(--vnfs-pink);}
-.st-pos{font-size:15px;font-weight:900;color:var(--text3);text-align:center;line-height:1;display:flex;flex-direction:column;align-items:center;gap:3px;}
+.st-pos{font-size:15px;font-weight:900;color:var(--text3);text-align:center;line-height:1;display:flex;flex-direction:column;align-items:center;gap:3px;white-space:nowrap;}
 .st-mover{font-size:9px;font-weight:800;letter-spacing:.02em;display:inline-flex;align-items:center;gap:1px;line-height:1;}
 .st-mover.up{color:#22c55e;}
 .st-mover.down{color:#e8186d;}
@@ -791,13 +792,13 @@ body.admin-active .dr-drag{display:block;}
 .st-pos.p2{color:rgba(255,255,255,.45);}
 .st-pos.p3{color:var(--orange);}
 .st-flag{font-size:16px;text-align:center;}
-.st-dname{font-size:12px;font-weight:700;color:#fff;}
-.st-dteam{font-size:10px;color:var(--text3);margin-top:1px;}
+.st-dname{font-size:12px;font-weight:700;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.st-dteam{font-size:10px;color:var(--text3);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .st-dcode{font-size:9px;font-weight:700;color:var(--text3);margin-top:1px;letter-spacing:.08em;}
-.st-pts{font-size:14px;font-weight:800;color:#fff;text-align:right;}
-.st-pts-lbl{font-size:9px;color:var(--text3);font-weight:500;}
-.st-gap-val{font-size:11px;color:var(--text3);text-align:right;font-weight:600;}
-.st-form{display:flex;gap:2px;justify-content:flex-end;}
+.st-pts{font-size:14px;font-weight:800;color:#fff;text-align:right;white-space:nowrap;}
+.st-pts-lbl{font-size:9px;color:var(--text3);font-weight:500;white-space:nowrap;}
+.st-gap-val{font-size:11px;color:var(--text3);text-align:right;font-weight:600;white-space:nowrap;}
+.st-form{display:flex;gap:2px;justify-content:flex-end;flex-wrap:nowrap;}
 .sf{width:20px;height:20px;border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;}
 .sf-w{background:#f59e0b;color:#000;}
 .sf-2{background:rgba(255,255,255,.15);color:rgba(255,255,255,.7);}
@@ -2934,7 +2935,7 @@ function getRaceSortValue(race){
 }
 
 // The landing page should follow the championship order from the source data, not a stale
-// status heuristic. Supabase `sort_order` wins first, then round number as fallback.
+// status heuristic. Neon `sort_order` wins first, then round number as fallback.
 function getNextRace(series){
   const matchSeries = (race) => !series || (race.series||[]).includes(series);
   const now = Date.now();
@@ -4268,6 +4269,13 @@ function confirmSync(){
   const series  = currentRaceSeries;
   if(!results.length || !STANDINGS_DATA[series]) return;
 
+  const usesLiveStandings = !!(window.VMSNeon && typeof window.VMSNeon.isEnabled === 'function' && window.VMSNeon.isEnabled());
+  if(usesLiveStandings){
+    alert('Live Neon standings are active. Points come from driver_standings and should not be re-summed locally.');
+    closeModal('sync');
+    return;
+  }
+
   const drivers      = STANDINGS_DATA[series].drivers;
   const constructors = STANDINGS_DATA[series].constructors;
   const syncCons     = document.getElementById('sync-constructors').checked;
@@ -4564,12 +4572,30 @@ function moverBadge(delta){
     : `<span class="st-mover down" title="Down ${Math.abs(delta)} since last update">▼${Math.abs(delta)}</span>`;
 }
 function recalcPositionsAndGaps(series){
-  const d = STANDINGS_DATA[series].drivers;
+  const data = STANDINGS_DATA[series];
+  if(!data) return;
+  const d = data.drivers || [];
+  const c = data.constructors || [];
+
+  const usesLiveStandings = !!(window.VMSNeon && typeof window.VMSNeon.isEnabled === 'function' && window.VMSNeon.isEnabled());
+  if(usesLiveStandings){
+    d.forEach(dr=>{ dr._prevPos = dr.pos; });
+    d.sort((a,b)=>(Number(b.pts)||0)-(Number(a.pts)||0) || ((Number(a.pos)||0)-(Number(b.pos)||0)));
+    const top = d[0]?.pts || 0;
+    d.forEach((dr,i)=>{
+      dr.pos = Number.isFinite(Number(dr.pos)) && Number(dr.pos) > 0 ? Number(dr.pos) : (i + 1);
+      dr.gap = i === 0 ? '0' : `-${Math.max(0, (Number(top) || 0) - (Number(dr.pts) || 0))}`;
+      dr._delta = (typeof dr._prevPos === 'number') ? (dr._prevPos - dr.pos) : 0;
+    });
+    c.sort((a,b)=>(Number(b.pts)||0)-(Number(a.pts)||0) || ((Number(a.pos)||0)-(Number(b.pos)||0)));
+    c.forEach((con,i)=>{ con.pos = Number.isFinite(Number(con.pos)) && Number(con.pos) > 0 ? Number(con.pos) : (i+1); });
+    return;
+  }
+
   d.forEach(dr=>{ dr._prevPos = dr.pos; });
   d.sort((a,b)=>b.pts-a.pts);
   const top = d[0]?.pts||0;
   d.forEach((dr,i)=>{ dr.pos=i+1; dr.gap = i===0?'—':`-${top-dr.pts}`; dr._delta = (typeof dr._prevPos==='number') ? (dr._prevPos - dr.pos) : 0; });
-  const c = STANDINGS_DATA[series].constructors;
   c.sort((a,b)=>b.pts-a.pts);
   c.forEach((con,i)=>con.pos=i+1);
 }

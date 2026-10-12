@@ -1,6 +1,6 @@
 (function (global) {
   const LIVE_KEY = 'vms_live_v1';
-  const CFG_KEY = 'vms_supabase_cfg';
+  const CFG_KEY = 'vms_neon_cfg';
 
   const ALIASES = {
     karazuarin: 'arin', arin: 'arin',
@@ -225,6 +225,10 @@
   }
 
   function loadLive() {
+    if (global.VMSNeon && typeof global.VMSNeon.isEnabled === 'function' && global.VMSNeon.isEnabled()) {
+      return false;
+    }
+
     try {
       const raw = JSON.parse(localStorage.getItem(LIVE_KEY));
       if (!raw) return false;
@@ -257,8 +261,12 @@
   function setCfg(partial) {
     const cfg = Object.assign(getCfg(), partial);
     localStorage.setItem(CFG_KEY, JSON.stringify({
-      supabaseUrl: cfg.supabaseUrl || '',
-      supabaseAnonKey: cfg.supabaseAnonKey || '',
+      neonDatabaseUrl: cfg.neonDatabaseUrl || '',
+      neonObjectStorageUrl: cfg.neonObjectStorageUrl || '',
+      neonObjectStorageBucket: cfg.neonObjectStorageBucket || 'media',
+      neonOrgId: cfg.neonOrgId || '',
+      neonProjectId: cfg.neonProjectId || '',
+      neonBranchId: cfg.neonBranchId || '',
       adminEmail: cfg.adminEmail || '',
     }));
     global.VMS_CONFIG = cfg;
@@ -283,8 +291,8 @@
     else recomputeAll();
     persistLive();
     refreshPublicViews();
-    if (global.VMSSupa && typeof global.VMSSupa.pushLive === 'function') {
-      global.VMSSupa.pushLive().catch(err => console.warn('Supabase push', err));
+    if (global.VMSNeon && typeof global.VMSNeon.pushLive === 'function') {
+      global.VMSNeon.pushLive().catch(err => console.warn('Neon push', err));
     }
   }
 

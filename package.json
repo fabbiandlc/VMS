@@ -1,0 +1,28 @@
+{
+  "name": "vms",
+  "version": "1.0.0",
+  "description": "Download the code, open it in VS Code, and run it with Live Server to make local improvements.",
+  "main": "index.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/fabbiandlc/VMS.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/fabbiandlc/VMS/issues"
+  },
+  "homepage": "https://github.com/fabbiandlc/VMS#readme",
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.1150.0",
+    "@neon/config": "^1.8.7",
+    "dotenv": "^18.0.7",
+    "pg": "^8.23.1"
+  }
+}

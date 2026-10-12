@@ -14,14 +14,14 @@ Download the code, open it in VS Code, and run it with Live Server to make local
 
 - `index.html` — main page
 - `js/` — project scripts
-- `supabase/` — Supabase schema and data
+- `neon.ts` — Neon service configuration for Postgres and Object Storage
 - `tools/` — utilities for generating or extracting content
 
 ## To improve the project
 
 - Edit the HTML, CSS, and JavaScript files directly.
 - Test your changes with Live Server.
-- If you want to connect real data, check the Supabase configuration in `js/vms-config.js`.
+- If you want to connect real Neon data, check the configuration in `js/vms-config.js` and the linked project in `.neon`.
 
 ## Recommended workflow
 
