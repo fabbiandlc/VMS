@@ -70,6 +70,110 @@ function sanitizeStorageKey(rawName) {
   return `${Date.now()}-${base.replace(/[^a-zA-Z0-9._-]/g, '-')}`;
 }
 
+async function resolveDriverId(pool, payload) {
+  const directId = payload.driver_id || payload.driverId;
+  if (directId) return directId;
+
+  const seriesId = payload.series_id || payload.seriesId || payload.series;
+  const driverName = payload.driver_name || payload.driverName || payload.name || payload.driver;
+  if (!seriesId || !driverName) return null;
+
+  const result = await pool.query(
+    `SELECT id FROM public.drivers WHERE series_id = $1 AND lower(trim(name)) = lower(trim($2)) LIMIT 1`,
+    [seriesId, String(driverName)]
+  );
+
+  return result.rows[0]?.id || null;
+}
+
+async function resolveTeamId(pool, payload) {
+  const directId = payload.team_id || payload.teamId;
+  if (directId) return directId;
+
+  const seriesId = payload.series_id || payload.seriesId || payload.series;
+  const teamName = payload.team_name || payload.teamName || payload.name || payload.team;
+  if (!seriesId || !teamName) return null;
+
+  const result = await pool.query(
+    `SELECT id FROM public.teams WHERE series_id = $1 AND lower(trim(name)) = lower(trim($2)) LIMIT 1`,
+    [seriesId, String(teamName)]
+  );
+
+  return result.rows[0]?.id || null;
+}
+
+async function upsertDriverStandings(pool, payload) {
+  const seriesId = payload.series_id || payload.seriesId || payload.series;
+  const driverId = await resolveDriverId(pool, payload);
+  if (!seriesId || !driverId) {
+    return { ok: false, error: 'Missing series_id or driver name/id' };
+  }
+
+  const formValue = Array.isArray(payload.form)
+    ? payload.form
+    : (payload.form ? JSON.parse(String(payload.form)) : []);
+
+  const result = await pool.query(
+    `INSERT INTO public.driver_standings (
+      driver_id, series_id, pts, wins, pods, dnf, poles, fls, pos, gap, form
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb)
+    ON CONFLICT (driver_id) DO UPDATE SET
+      series_id = EXCLUDED.series_id,
+      pts = EXCLUDED.pts,
+      wins = EXCLUDED.wins,
+      pods = EXCLUDED.pods,
+      dnf = EXCLUDED.dnf,
+      poles = EXCLUDED.poles,
+      fls = EXCLUDED.fls,
+      pos = EXCLUDED.pos,
+      gap = EXCLUDED.gap,
+      form = EXCLUDED.form
+    RETURNING *`,
+    [
+      driverId,
+      seriesId,
+      Number(payload.pts ?? payload.points ?? 0),
+      Number(payload.wins ?? 0),
+      Number(payload.pods ?? 0),
+      Number(payload.dnf ?? 0),
+      Number(payload.poles ?? 0),
+      Number(payload.fls ?? 0),
+      Number(payload.pos ?? 0),
+      payload.gap ?? '',
+      JSON.stringify(formValue),
+    ]
+  );
+
+  return { ok: true, row: result.rows[0] };
+}
+
+async function upsertConstructorStandings(pool, payload) {
+  const seriesId = payload.series_id || payload.seriesId || payload.series;
+  const teamId = await resolveTeamId(pool, payload);
+  if (!seriesId || !teamId) {
+    return { ok: false, error: 'Missing series_id or team name/id' };
+  }
+
+  const result = await pool.query(
+    `INSERT INTO public.constructor_standings (
+      team_id, series_id, pts, pos
+    ) VALUES ($1, $2, $3, $4)
+    ON CONFLICT (team_id) DO UPDATE SET
+      series_id = EXCLUDED.series_id,
+      pts = EXCLUDED.pts,
+      pos = EXCLUDED.pos
+    RETURNING *`,
+    [
+      teamId,
+      seriesId,
+      Number(payload.pts ?? payload.points ?? 0),
+      Number(payload.pos ?? 0),
+    ]
+  );
+
+  return { ok: true, row: result.rows[0] };
+}
+
 async function listStorageObjects(prefix = '') {
   if (!s3Client) {
     return { configured: false, items: [] };
@@ -200,6 +304,33 @@ function createServer() {
     const tableName = match[1];
     if (!allowedTables.has(tableName)) {
       sendJson(res, 400, { error: `Table not allowed: ${tableName}` });
+      return;
+    }
+
+    if (req.method !== 'GET') {
+      try {
+        const rawBody = await readBody(req);
+        const payload = parseJsonBody(rawBody);
+
+        if (tableName === 'driver_standings') {
+          const result = await upsertDriverStandings(pool, payload);
+          sendJson(res, result.ok ? 200 : 400, result);
+          return;
+        }
+
+        if (tableName === 'constructor_standings') {
+          const result = await upsertConstructorStandings(pool, payload);
+          sendJson(res, result.ok ? 200 : 400, result);
+          return;
+        }
+
+        sendJson(res, 405, { error: `Method not allowed for table ${tableName}` });
+      } catch (error) {
+        sendJson(res, 500, {
+          error: 'Database write failed',
+          detail: error.message,
+        });
+      }
       return;
     }
 

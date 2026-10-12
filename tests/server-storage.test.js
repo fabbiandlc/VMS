@@ -71,3 +71,31 @@ test('server upload endpoint writes to the configured Neon bucket', async () => 
     await new Promise((resolve, reject) => server.close((err) => err ? reject(err) : resolve()));
   }
 });
+
+test('server accepts standings updates for driver points', async () => {
+  const server = createServer();
+  await new Promise((resolve) => server.listen(0, resolve));
+
+  try {
+    const response = await request(server, '/api/vms/driver_standings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        series_id: 'f1',
+        driver_name: 'Peters',
+        pts: 42,
+        wins: 1,
+        pods: 2,
+        dnf: 0,
+      }),
+    });
+
+    assert.equal(response.status, 200, response.body);
+    const payload = JSON.parse(response.body);
+    assert.equal(payload.ok, true);
+    assert.equal(payload.row.driver_id, 'd_f1_peters');
+    assert.equal(payload.row.pts, 42);
+  } finally {
+    await new Promise((resolve, reject) => server.close((err) => err ? reject(err) : resolve()));
+  }
+});

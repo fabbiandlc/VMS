@@ -6124,7 +6124,63 @@ function openEditDriver(series, idx){
   document.getElementById('dm-form').value = (d.form||[]).join(',');
   openModal('driver');
 }
-function saveDriver(){
+function rebuildStandingsForSeries(series){
+  const standings = STANDINGS_DATA[series];
+  if(!standings) return;
+  const drivers = Array.isArray(standings.drivers) ? standings.drivers : [];
+  const constructors = Array.isArray(standings.constructors) ? standings.constructors : [];
+  const constructorByName = new Map();
+  constructors.forEach((con)=>{
+    constructorByName.set(String(con.name || '').trim().toLowerCase(), con);
+  });
+
+  const nextConstructors = new Map();
+  drivers.forEach((driver)=>{
+    const teamName = String(driver.team || '—').trim() || '—';
+    if(!nextConstructors.has(teamName.toLowerCase())){
+      const existing = constructorByName.get(teamName.toLowerCase()) || { name: teamName, color: '#e8186d', pts: 0, pos: 0 };
+      nextConstructors.set(teamName.toLowerCase(), { ...existing, name: teamName, pts: 0, pos: 0 });
+    }
+    const bucket = nextConstructors.get(teamName.toLowerCase());
+    bucket.pts = (Number(bucket.pts) || 0) + (Number(driver.pts) || 0);
+  });
+
+  standings.constructors = Array.from(nextConstructors.values()).sort((a,b)=> (Number(b.pts)||0)-(Number(a.pts)||0));
+  standings.constructors.forEach((con, i)=>{ con.pos = i + 1; });
+  recalcPositionsAndGaps(series);
+}
+
+async function persistStandingsChange(tableName, payload) {
+  if (!window.VMSNeon || typeof window.VMSNeon.isEnabled !== 'function' || !window.VMSNeon.isEnabled()) {
+    return { ok: true, skipped: true };
+  }
+
+  const apiBase = (window.VMS_CONFIG && window.VMS_CONFIG.neonApiUrl
+    ? window.VMS_CONFIG.neonApiUrl
+    : 'http://localhost:3001/api/vms').replace(/\/+$/, '');
+
+  const response = await fetch(`${apiBase}/${tableName}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+
+  const rawText = await response.text();
+  let data = {};
+  try {
+    data = rawText ? JSON.parse(rawText) : {};
+  } catch (error) {
+    data = { error: rawText || `Failed to save ${tableName}` };
+  }
+
+  if (!response.ok || data.ok === false) {
+    throw new Error(data.error || `Failed to save ${tableName}`);
+  }
+
+  return data;
+}
+
+async function saveDriver(){
   const series = document.getElementById('dm-series').value;
   const idx = parseInt(document.getElementById('dm-editIdx').value);
   const name = document.getElementById('dm-name').value.trim();
@@ -6137,17 +6193,35 @@ function saveDriver(){
     wins: parseInt(document.getElementById('dm-wins').value)||0,
     pods: parseInt(document.getElementById('dm-pods').value)||0,
     dnf:  parseInt(document.getElementById('dm-dnf').value)||0,
-    form: document.getElementById('dm-form').value.split(',').map(s=>s.trim().toUpperCase()||'—').slice(0,5),
+    form: document.getElementById('dm-form').value.split(',').map(s=>s.trim().toUpperCase()||'—').filter(Boolean).slice(0,5),
     pos:0, gap:'—'
   };
   if(idx===-1) STANDINGS_DATA[series].drivers.push(driver);
   else STANDINGS_DATA[series].drivers[idx] = driver;
+
+  try {
+    await persistStandingsChange('driver_standings', {
+      series_id: series,
+      driver_name: name,
+      pts: driver.pts,
+      wins: driver.wins,
+      pods: driver.pods,
+      dnf: driver.dnf,
+      form: driver.form,
+    });
+  } catch (error) {
+    console.error('Unable to persist driver standings change', error);
+    alert('The standings edit was saved locally but could not be written to the database.');
+  }
+
   closeModal('driver');
+  rebuildStandingsForSeries(series);
   renderStandingsForPage(series);
 }
 function deleteDriver(series, idx){
   if(!confirm('Delete this driver?')) return;
   STANDINGS_DATA[series].drivers.splice(idx,1);
+  rebuildStandingsForSeries(series);
   renderStandingsForPage(series);
 }
 
@@ -6175,7 +6249,7 @@ function openEditConstructor(series, idx){
   document.getElementById('cm-color').value = c.color||'#e8186d';
   openModal('constructor');
 }
-function saveConstructor(){
+async function saveConstructor(){
   const series = document.getElementById('cm-series').value;
   const idx = parseInt(document.getElementById('cm-editIdx').value);
   const name = document.getElementById('cm-name').value.trim();
@@ -6183,6 +6257,19 @@ function saveConstructor(){
   const con = { name, pts:parseInt(document.getElementById('cm-pts').value)||0, color:document.getElementById('cm-color').value, pos:0 };
   if(idx===-1) STANDINGS_DATA[series].constructors.push(con);
   else STANDINGS_DATA[series].constructors[idx] = con;
+
+  try {
+    await persistStandingsChange('constructor_standings', {
+      series_id: series,
+      team_name: name,
+      pts: con.pts,
+      pos: con.pos,
+    });
+  } catch (error) {
+    console.error('Unable to persist constructor standings change', error);
+    alert('The constructor edit was saved locally but could not be written to the database.');
+  }
+
   closeModal('constructor');
   renderStandingsForPage(series);
 }
@@ -6212,6 +6299,7 @@ function doLogin(){
     initInlineEditing();
     refreshJoinLinkIndicators();
     rerenderCurrentPage();
+    refreshStandingsAdminState();
   } else { alert('Wrong password'); }
 }
 function toggleAdmin(){
@@ -6223,6 +6311,21 @@ function toggleAdmin(){
     document.getElementById('standingsAdminBar').style.display='none';
     document.querySelectorAll('.editable').forEach(el=>{ el.contentEditable='false'; el.blur(); });
     rerenderCurrentPage();
+  }
+}
+
+function refreshStandingsAdminState(){
+  if(!editMode) return;
+  const bar = document.getElementById('standingsAdminBar');
+  if(!bar) return;
+  if(currentPage && currentPage.startsWith('standings-')){
+    const series = currentPage.replace('standings-','');
+    bar.style.display = 'flex';
+    const label = document.getElementById('standingsAdminSeriesLabel');
+    if(label) label.textContent = series.toUpperCase();
+    renderStandingsForPage(series);
+  } else {
+    bar.style.display = 'none';
   }
 }
 function rerenderCurrentPage(){
