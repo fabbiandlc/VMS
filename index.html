@@ -84,8 +84,8 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;font-
 .vhero-stripes{position:absolute;inset:0;background:repeating-linear-gradient(115deg,rgba(255,255,255,.025) 0 2px,transparent 2px 34px);pointer-events:none;}
 .vhero-glow{position:absolute;top:-140px;left:-100px;width:520px;height:520px;background:radial-gradient(circle,rgba(232,24,109,.4) 0%,transparent 68%);filter:blur(10px);pointer-events:none;animation:vheroPulse 3.4s ease-in-out infinite;}
 .vhero-glow2{position:absolute;bottom:-160px;right:-60px;width:460px;height:460px;background:radial-gradient(circle,rgba(124,58,237,.32) 0%,transparent 68%);filter:blur(10px);pointer-events:none;animation:vheroPulse 3.4s ease-in-out infinite 1.2s;}
-.vhero-body{position:relative;z-index:1;padding:96px 32px 76px;}
-.vhero-col{max-width:640px;}
+.vhero-body{position:relative;z-index:1;padding:96px 32px 76px;display:flex;justify-content:center;align-items:center;}
+.vhero-col{max-width:760px;width:100%;display:flex;flex-direction:column;align-items:center;text-align:center;}
 
 .vcs-tz-toggle{border:1px solid var(--border2);background:transparent;color:var(--text3);font-size:9px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;padding:2px 8px;border-radius:5px;cursor:pointer;margin-left:8px;transition:all .15s;font-family:'Inter',sans-serif;}
 .vcs-tz-toggle:hover{color:#fff;border-color:#fff;}
@@ -269,18 +269,18 @@ body.admin-active .news-card-del{display:inline-flex;}
 .vhero-eyebrow-dash{width:26px;height:2px;background:var(--vnfs-pink);display:inline-block;flex-shrink:0;}
 .vhero-eyebrow-text{font-size:10.5px;font-weight:800;letter-spacing:.26em;text-transform:uppercase;color:var(--vnfs-pink);}
 .vhero-title{font-family:'Anton',sans-serif;font-weight:400;letter-spacing:-.01em;line-height:.88;margin:0 0 18px;position:relative;text-transform:uppercase;}
-.vhero-title .l1{display:block;font-size:clamp(2.8rem,7.5vw,5.6rem);color:#fff;}
-.vhero-title .l2{display:block;font-size:clamp(2.8rem,7.5vw,5.6rem);background:var(--vnfs-grad);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin-top:-.05em;}
-.vhero-desc{font-size:13px;color:var(--text2);line-height:1.7;max-width:420px;margin-bottom:26px;}
-.vhero-actions{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:8px;}
+.vhero-title .l1{display:block;font-size:clamp(3.2rem,8.5vw,6.4rem);color:#fff;}
+.vhero-title .l2{display:block;font-size:clamp(3.2rem,8.5vw,6.4rem);background:var(--vnfs-grad);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin-top:-.05em;}
+.vhero-desc{font-size:15px;color:var(--text2);line-height:1.7;max-width:740px;margin-bottom:26px;text-align:center;}
+.vhero-actions{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:8px;justify-content:center;}
 .vhero-btn{height:42px;padding:0 22px;border-radius:3px;font-size:12px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;cursor:pointer;font-family:'Inter',sans-serif;display:inline-flex;align-items:center;gap:8px;transition:all .18s;border:none;}
 .vhero-btn.primary{background:var(--vnfs-grad);color:#fff;}
 .vhero-btn.primary:hover{transform:translateX(3px);}
 .vhero-btn.ghost{background:transparent;color:#fff;border:1px solid rgba(255,255,255,.25);}
 .vhero-btn.ghost:hover{border-color:#fff;background:rgba(255,255,255,.06);}
 
-.vhero-stat-row{display:flex;gap:36px;margin-top:8px;}
-.vhero-stat{border-left:none;padding:0;}
+.vhero-stat-row{display:flex;gap:36px;margin-top:8px;justify-content:center;flex-wrap:wrap;}
+.vhero-stat{border-left:none;padding:0;text-align:center;}
 .vhero-stat-num{font-family:'Anton',sans-serif;font-weight:400;font-size:1.9rem;color:var(--vnfs-pink);letter-spacing:0;line-height:1;}
 .vhero-stat-lbl{font-size:9px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);margin-top:6px;}
 
@@ -6798,7 +6798,7 @@ function formatEventTime(date, useLocal){
   const opts = useLocal
     ? { weekday:'short', month:'short', day:'numeric', hour:'numeric', minute:'2-digit', timeZoneName:'short' }
     : { timeZone:'America/New_York', weekday:'short', month:'short', day:'numeric', hour:'numeric', minute:'2-digit', timeZoneName:'short' };
-  return date.toLocaleString('en-US', opts);
+  return new Intl.DateTimeFormat('en-US', opts).format(date);
 }
 function initCountdown(prefix){
   prefix = prefix || 'vhero';
@@ -6808,17 +6808,16 @@ function initCountdown(prefix){
   // Month name → 0-based index
   const MONTHS = {Jan:0,Feb:1,Mar:2,Apr:3,May:4,Jun:5,Jul:6,Aug:7,Sep:8,Oct:9,Nov:10,Dec:11};
 
-  // Parse a race's target Date. Uses satDate (F1/F2 session = Saturday 11AM EST)
-  // EST = UTC-5, EDT (summer) = UTC-4. We'll use UTC-4 (EDT) for summer races.
+  // Parse a race's target Date in the actual race timezone (ET/EDT), not in the browser local timezone.
+  // Saturday session is 11:00 AM ET / EDT, which is 15:00 UTC during daylight saving time.
   function parseRaceDate(race){
     if(!race || !race.satDate) return null;
     const parts = race.satDate.trim().split(' ');
     if(parts.length < 2) return null;
     const mon = MONTHS[parts[0]];
-    const day = parseInt(parts[1]);
+    const day = parseInt(parts[1], 10);
     if(isNaN(day) || mon === undefined) return null;
-    // F1 Saturday session: 11:00 AM EDT (UTC-4)
-    return new Date(Date.UTC(2026, mon, day, 15, 0, 0)); // 11AM EDT = 15:00 UTC
+    return new Date(Date.UTC(2026, mon, day, 15, 0, 0));
   }
 
   const SERIES_LABEL = {f1:'Formula 1', f2:'Formula 2', f3:'Formula 3'};
